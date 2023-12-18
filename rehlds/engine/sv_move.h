@@ -33,7 +33,7 @@
 
 qboolean SV_CheckBottom(edict_t *ent);
 qboolean SV_movetest(edict_t *ent, vec_t *move, qboolean relink);
-qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink);
+qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMode);
 qboolean SV_StepDirection(edict_t *ent, float yaw, float dist);
 qboolean SV_FlyDirection(edict_t *ent, vec_t *direction);
 void SV_FixCheckBottom(edict_t *ent);

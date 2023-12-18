@@ -8051,6 +8051,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_footsteps);
 	Cvar_RegisterVariable(&sv_accelerate);
 	Cvar_RegisterVariable(&sv_stepsize);
+	Cvar_RegisterVariable(&sv_ledgesize);
 	Cvar_RegisterVariable(&sv_bounce);
 	Cvar_RegisterVariable(&sv_airaccelerate);
 	Cvar_RegisterVariable(&sv_wateraccelerate);

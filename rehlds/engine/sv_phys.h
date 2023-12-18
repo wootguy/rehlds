@@ -36,6 +36,7 @@ extern cvar_t sv_maxvelocity;
 extern cvar_t sv_gravity;
 extern cvar_t sv_bounce;
 extern cvar_t sv_stepsize;
+extern cvar_t sv_ledgesize;
 extern cvar_t sv_friction;
 extern cvar_t sv_stopspeed;
 

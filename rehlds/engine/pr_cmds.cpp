@@ -1681,9 +1681,9 @@ int EXT_FUNC PF_walkmove_I(edict_t *ent, float yaw, float dist, int iMode)
 		case 1:
 			return SV_movetest(ent, move, 1);
 		case 2:
-			return SV_movestep(ent, move, 0);
+			return SV_movestep(ent, move, 0, TRUE);
 		default:
-			return SV_movestep(ent, move, 1);
+			return SV_movestep(ent, move, 1, FALSE);
 		}
 	}
 	return 0;

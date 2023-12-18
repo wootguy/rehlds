@@ -28,7 +28,7 @@
 
 #include "precompiled.h"
 
-// Returns false if any part of the bottom of the entity is off an edge that is not a staircase.
+// Returns false if any part of the bottom of the entity is off an edge that is not walkable.
 qboolean SV_CheckBottom(edict_t *ent)
 {
 	vec3_t mins;
@@ -71,13 +71,13 @@ qboolean SV_CheckBottom(edict_t *ent)
 realcheck:
 
 	// check it for real...
-	start[2] = mins[2] + sv_stepsize.value;
+	start[2] = mins[2] + sv_ledgesize.value;
 
 	// the midpoint must be within 16 of the bottom
 	start[0] = stop[0] = (mins[0] + maxs[0]) * 0.5f;
 	start[1] = stop[1] = (mins[1] + maxs[1]) * 0.5f;
 
-	stop[2] = start[2] - 2.0f * sv_stepsize.value;
+	stop[2] = start[2] - 2.0f * sv_ledgesize.value;
 	trace = SV_Move(start, vec3_origin, vec3_origin, stop, MOVE_NOMONSTERS, ent, monsterClip);
 
 	if (trace.fraction == 1.0f)
@@ -98,7 +98,7 @@ realcheck:
 			if (trace.fraction != 1.0f && trace.endpos[2] > bottom)
 				bottom = trace.endpos[2];
 
-			if (trace.fraction == 1.0f || mid - trace.endpos[2] > sv_stepsize.value)
+			if (trace.fraction == 1.0f || mid - trace.endpos[2] > sv_ledgesize.value)
 				return FALSE;
 		}
 	}
@@ -157,6 +157,31 @@ qboolean SV_movetest(edict_t *ent, vec_t *move, qboolean relink)
 			return TRUE;
 		}
 
+		if (SV_CheckBottom(ent)) {
+			// TODO: code duplicated in movestep
+			vec3_t end;
+			trace_t trace;
+			qboolean monsterClip = (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE;
+
+			end[0] = ent->v.origin[0];
+			end[1] = ent->v.origin[1];
+			end[2] = ent->v.origin[2] - sv_ledgesize.value;
+			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip);
+			if (trace.allsolid || trace.fraction == 1.0f)
+				return FALSE;
+
+			ent->v.origin[0] = trace.endpos[0];
+			ent->v.origin[1] = trace.endpos[1];
+			ent->v.origin[2] = trace.endpos[2];
+			if (relink)
+			{
+				SV_LinkEdict(ent, FALSE);
+			}
+			ent->v.groundentity = trace.ent;
+
+			return TRUE;
+		}
+
 		// walked off an edge
 		return FALSE;
 	}
@@ -199,7 +224,7 @@ qboolean SV_movetest(edict_t *ent, vec_t *move, qboolean relink)
 // The move will be adjusted for slopes and stairs, but if the move isn't
 // possible, no move is done, false is returned, and
 // pr_global_struct->trace_normal is set to the normal of the blocking wall
-qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink)
+qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMode)
 {
 	trace_t trace;
 	vec3_t neworg, oldorg, end;
@@ -281,8 +306,8 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink)
 
 	if (trace.fraction == 1.0f)
 	{
-		// if monster had the ground pulled out, go ahead and fall
-		if (ent->v.flags & FL_PARTIALGROUND)
+		// if monster had the ground pulled out, or walked off a safe ledge, go ahead and fall
+		if ((ent->v.flags & FL_PARTIALGROUND) || (!testMode && SV_CheckBottom(ent)))
 		{
 			VectorAdd(ent->v.origin, move, ent->v.origin);
 
@@ -296,7 +321,33 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink)
 			return TRUE;
 		}
 
-		// walked off an edge
+		if (testMode && SV_CheckBottom(ent)) {
+			// the move is being tested and this ledge is safe, so continue moving from floor position
+			// or else future move tests will fail because the monster is not FL_ONGROUND
+			// TODO: code duplicated in movetest and PF_droptofloor_I
+			vec3_t end;
+			trace_t trace;
+			qboolean monsterClip = (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE;
+
+			end[0] = ent->v.origin[0];
+			end[1] = ent->v.origin[1];
+			end[2] = ent->v.origin[2] - sv_ledgesize.value;
+			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip);
+			if (trace.allsolid || trace.fraction == 1.0f)
+				return FALSE;
+
+			ent->v.origin[0] = trace.endpos[0];
+			ent->v.origin[1] = trace.endpos[1];
+			ent->v.origin[2] = trace.endpos[2];
+			if (relink)
+			{
+				SV_LinkEdict(ent, FALSE);
+			}
+			ent->v.groundentity = trace.ent;
+
+			return TRUE;
+		}
+
 		return FALSE;
 	}
 
@@ -345,7 +396,7 @@ qboolean SV_StepDirection(edict_t *ent, float yaw, float dist)
 	move[1] = sin(yaw) * dist;
 	move[2] = 0.0f;
 
-	if (SV_movestep(ent, move, FALSE))
+	if (SV_movestep(ent, move, FALSE, FALSE))
 	{
 		SV_LinkEdict(ent, TRUE);
 		return TRUE;
@@ -357,7 +408,7 @@ qboolean SV_StepDirection(edict_t *ent, float yaw, float dist)
 
 qboolean SV_FlyDirection(edict_t *ent, vec_t *direction)
 {
-	if (SV_movestep(ent, direction, FALSE))
+	if (SV_movestep(ent, direction, FALSE, FALSE))
 	{
 		SV_LinkEdict(ent, TRUE);
 		return TRUE;
