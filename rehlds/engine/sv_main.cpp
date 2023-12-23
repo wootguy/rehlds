@@ -216,6 +216,7 @@ cvar_t sv_rehlds_send_mapcycle = { "sv_rehlds_send_mapcycle", "0", 0, 0.0f, null
 cvar_t sv_rehlds_maxclients_from_single_ip = { "sv_rehlds_maxclients_from_single_ip", "5", 0, 5.0f, nullptr };
 cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
+cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -5193,6 +5194,9 @@ void SV_AddResource_internal(resourcetype_t type, const char *name, int size, un
 	r->nIndex = index;
 
 	Q_strlcpy(r->szFileName, name);
+
+	if (sv_lowercase.value)
+		Q_strlwr(r->szFileName); // linux fastdl hackfix
 }
 
 size_t SV_CountResourceByType(resourcetype_t type, resource_t **pResourceList, size_t nListMax, size_t *nWidthFileNameMax)
@@ -8123,6 +8127,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_rollangle);
 	Cvar_RegisterVariable(&sv_use_entity_file);
 	Cvar_RegisterVariable(&sv_usercmd_custom_random_seed);
+	Cvar_RegisterVariable(&sv_lowercase);
 #endif
 
 	for (int i = 0; i < MAX_MODELS; i++)
