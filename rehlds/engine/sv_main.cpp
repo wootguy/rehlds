@@ -217,6 +217,7 @@ cvar_t sv_rehlds_maxclients_from_single_ip = { "sv_rehlds_maxclients_from_single
 cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
 cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
+cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -6035,7 +6036,8 @@ int SV_SpawnServer(qboolean bIsDemo, char *server, char *startspot)
 
 	Log_Open();
 	Log_Printf("Loading map \"%s\"\n", server);
-	Log_PrintServerVars();
+	if (sv_printcvar.value > 1)
+		Log_PrintServerVars();
 	NET_Config((qboolean)(g_psvs.maxclients > 1));
 
 	pszhost = Cvar_VariableString("hostname");
@@ -8128,6 +8130,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_use_entity_file);
 	Cvar_RegisterVariable(&sv_usercmd_custom_random_seed);
 	Cvar_RegisterVariable(&sv_lowercase);
+	Cvar_RegisterVariable(&sv_printcvar);
 #endif
 
 	for (int i = 0; i < MAX_MODELS; i++)

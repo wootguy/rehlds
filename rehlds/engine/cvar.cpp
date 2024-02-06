@@ -273,7 +273,7 @@ void EXT_FUNC Cvar_DirectSet_internal(struct cvar_s *var, const char *value)
 
 	if (changed && var->flags & FCVAR_SERVER)
 	{
-		if (!(var->flags & FCVAR_UNLOGGED))
+		if (!(var->flags & FCVAR_UNLOGGED) && sv_printcvar.value > 0)
 		{
 			if (var->flags & FCVAR_PROTECTED)
 			{
