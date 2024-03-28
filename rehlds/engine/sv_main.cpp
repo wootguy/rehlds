@@ -218,6 +218,7 @@ cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
 cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
 cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
+cvar_t sv_max_client_edicts = { "sv_max_client_edicts", "1665", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -5645,7 +5646,10 @@ void SV_CreateBaseline(void)
 	gEntityInterface.pfnCreateInstancedBaselines();
 	MSG_WriteByte(&g_psv.signon, svc_spawnbaseline);
 	MSG_StartBitWriting(&g_psv.signon);
-	for (entnum = 0; entnum < g_psv.num_edicts; entnum++)
+
+	int sendEdicts = Q_min(sv_max_client_edicts.value, g_psv.num_edicts);
+
+	for (entnum = 0; entnum < sendEdicts; entnum++)
 	{
 		svent = &g_psv.edicts[entnum];
 		if (!svent->free && (g_psvs.maxclients >= entnum || svent->v.modelindex))
@@ -8131,6 +8135,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_usercmd_custom_random_seed);
 	Cvar_RegisterVariable(&sv_lowercase);
 	Cvar_RegisterVariable(&sv_printcvar);
+	Cvar_RegisterVariable(&sv_max_client_edicts);
 #endif
 
 	for (int i = 0; i < MAX_MODELS; i++)
