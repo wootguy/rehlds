@@ -58,6 +58,7 @@ typedef struct moveclip_s	// TODO: Move it to world.cpp someday
 	short int ignoretrans;
 	edict_t *passedict;
 	qboolean monsterClipBrush;
+	qboolean skipNoclipTraceEnts;
 } moveclip_t;
 
 #define CONTENTS_NONE       0 // no custom contents specified
@@ -109,7 +110,7 @@ void SV_ClipToLinks(areanode_t *node, moveclip_t *clip);
 void SV_ClipToWorldbrush(areanode_t *node, moveclip_t *clip);
 void SV_MoveBounds(const vec_t *start, const vec_t *mins, const vec_t *maxs, const vec_t *end, vec_t *boxmins, vec_t *boxmaxs);
 trace_t SV_MoveNoEnts(const vec_t *start, vec_t *mins, vec_t *maxs, const vec_t *end, int type, edict_t *passedict);
-trace_t SV_Move(const vec_t *start, const vec_t *mins, const vec_t *maxs, const vec_t *end, int type, edict_t *passedict, qboolean monsterClipBrush);
+trace_t SV_Move(const vec_t *start, const vec_t *mins, const vec_t *maxs, const vec_t *end, int type, edict_t *passedict, qboolean monsterClipBrush, qboolean skipNoclipTraceEnts);
 
 #ifdef REHLDS_OPT_PEDANTIC
 trace_t SV_Move_Point(const vec_t *start, const vec_t *end, int type, edict_t *passedict);

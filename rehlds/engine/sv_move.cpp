@@ -78,7 +78,7 @@ realcheck:
 	start[1] = stop[1] = (mins[1] + maxs[1]) * 0.5f;
 
 	stop[2] = start[2] - 2.0f * sv_ledgesize.value;
-	trace = SV_Move(start, vec3_origin, vec3_origin, stop, MOVE_NOMONSTERS, ent, monsterClip);
+	trace = SV_Move(start, vec3_origin, vec3_origin, stop, MOVE_NOMONSTERS, ent, monsterClip, FALSE);
 
 	if (trace.fraction == 1.0f)
 		return FALSE;
@@ -93,7 +93,7 @@ realcheck:
 			start[0] = stop[0] = x ? maxs[0] : mins[0];
 			start[1] = stop[1] = y ? maxs[1] : mins[1];
 
-			trace = SV_Move(start, vec3_origin, vec3_origin, stop, MOVE_NOMONSTERS, ent, monsterClip);
+			trace = SV_Move(start, vec3_origin, vec3_origin, stop, MOVE_NOMONSTERS, ent, monsterClip, FALSE);
 
 			if (trace.fraction != 1.0f && trace.endpos[2] > bottom)
 				bottom = trace.endpos[2];
@@ -166,7 +166,7 @@ qboolean SV_movetest(edict_t *ent, vec_t *move, qboolean relink)
 			end[0] = ent->v.origin[0];
 			end[1] = ent->v.origin[1];
 			end[2] = ent->v.origin[2] - sv_ledgesize.value;
-			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip);
+			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip, FALSE);
 			if (trace.allsolid || trace.fraction == 1.0f)
 				return FALSE;
 
@@ -254,7 +254,7 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMo
 					neworg[2] += 8.0f;
 			}
 
-			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, neworg, MOVE_NORMAL, ent, monsterClipBrush);
+			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, neworg, MOVE_NORMAL, ent, monsterClipBrush, FALSE);
 
 			if (trace.fraction == 1.0f)
 			{
@@ -290,7 +290,7 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMo
 	VectorCopy(neworg, end);
 	end[2] -= sv_stepsize.value * 2.0f;
 
-	trace = SV_Move(neworg, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClipBrush);
+	trace = SV_Move(neworg, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClipBrush, FALSE);
 
 	if (trace.allsolid)
 		return FALSE;
@@ -298,7 +298,7 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMo
 	if (trace.startsolid)
 	{
 		neworg[2] = neworg[2] - sv_stepsize.value;
-		trace = SV_Move(neworg, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClipBrush);
+		trace = SV_Move(neworg, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClipBrush, FALSE);
 
 		if (trace.allsolid || trace.startsolid)
 			return FALSE;
@@ -332,7 +332,7 @@ qboolean SV_movestep(edict_t *ent, vec_t *move, qboolean relink, qboolean testMo
 			end[0] = ent->v.origin[0];
 			end[1] = ent->v.origin[1];
 			end[2] = ent->v.origin[2] - sv_ledgesize.value;
-			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip);
+			trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, MOVE_NORMAL, ent, monsterClip, FALSE);
 			if (trace.allsolid || trace.fraction == 1.0f)
 				return FALSE;
 

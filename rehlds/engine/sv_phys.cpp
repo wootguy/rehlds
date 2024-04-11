@@ -233,7 +233,7 @@ void SV_FlyMove(edict_t *ent, float time, float bounce)
 		VectorMA(ent->v.origin, time_left, ent->v.velocity, move);
 
 		// See if we can make it from origin to end point
-		trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, move, moveType, ent, monsterClip);
+		trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, move, moveType, ent, monsterClip, FALSE);
 
 		// If we started in a solid object, or we were in solid space the whole way, zero out our velocity.
 		if (trace.allsolid)
@@ -247,7 +247,7 @@ void SV_FlyMove(edict_t *ent, float time, float bounce)
 		// the copy the end position into the ent->v.origin and zero the plane counter.
 		if (trace.fraction > 0.0f)
 		{
-			trace_t test = SV_Move(trace.endpos, ent->v.mins, ent->v.maxs, trace.endpos, moveType, ent, monsterClip);
+			trace_t test = SV_Move(trace.endpos, ent->v.mins, ent->v.maxs, trace.endpos, moveType, ent, monsterClip, FALSE);
 			if (!test.allsolid)
 			{
 				// actually covered some distance
@@ -451,7 +451,7 @@ trace_t SV_PushEntity(edict_t *ent, vec_t *push)
 		moveType = MOVE_NORMAL;
 
 	qboolean monsterClip = (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE;
-	trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, moveType, ent, monsterClip);
+	trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, end, moveType, ent, monsterClip, FALSE);
 
 	if (trace.fraction != 0.0f)
 	{
@@ -1455,7 +1455,7 @@ void SV_Physics_Step(edict_t *ent)
 	{
 		if (gGlobalVariables.force_retouch != 0.0f)
 		{
-			trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, ent->v.origin, MOVE_NORMAL, ent, (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE);
+			trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, ent->v.origin, MOVE_NORMAL, ent, (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE, FALSE);
 
 			// hentacle impact code
 			if ((trace.fraction < 1.0f || trace.startsolid) && trace.ent)
@@ -1514,6 +1514,8 @@ void SV_Physics()
 		}
 
 		ent->v.flags &= ~FL_BASEVELOCITY;
+
+		VectorCopy(ent->v.origin, ent->v.oldorigin);
 
 		switch (ent->v.movetype)
 		{
@@ -1577,7 +1579,7 @@ trace_t SV_Trace_Toss(edict_t *ent, edict_t *ignore)
 		VectorMA(tent->v.angles, host_frametime, tent->v.avelocity, tent->v.angles);
 		VectorScale(tent->v.velocity, host_frametime, move);
 		VectorAdd(tent->v.origin, move, end);
-		trace = SV_Move(tent->v.origin, tent->v.mins, tent->v.maxs, end, MOVE_NORMAL, tent, FALSE);
+		trace = SV_Move(tent->v.origin, tent->v.mins, tent->v.maxs, end, MOVE_NORMAL, tent, FALSE, FALSE);
 		VectorCopy(trace.endpos, tent->v.origin);
 	}
 	while (!trace.ent || trace.ent == ignore);

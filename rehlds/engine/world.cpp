@@ -713,7 +713,7 @@ int SV_PointContents(const vec_t *p)
 edict_t *SV_TestEntityPosition(edict_t *ent)
 {
 	qboolean monsterClip = (ent->v.flags & FL_MONSTERCLIP) ? TRUE : FALSE;
-	trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, ent->v.origin, MOVE_NORMAL, ent, monsterClip);
+	trace_t trace = SV_Move(ent->v.origin, ent->v.mins, ent->v.maxs, ent->v.origin, MOVE_NORMAL, ent, monsterClip, FALSE);
 
 	if (trace.startsolid)
 	{
@@ -1153,6 +1153,8 @@ void SV_ClipToLinks(areanode_t *node, moveclip_t *clip)
 {
 	link_t *next, *l;
 	edict_t *touch;
+	bool isMonster = clip->passedict && clip->passedict->v.flags & FL_MONSTER;
+	bool isPushable = clip->passedict && clip->passedict->v.movetype == MOVETYPE_PUSHSTEP;
 
 	// touch linked edicts
 	for (l = node->solid_edicts.next; l != &node->solid_edicts; l = next)
@@ -1189,6 +1191,21 @@ void SV_ClipToLinks(areanode_t *node, moveclip_t *clip)
 			return;
 #endif // REHLDS_FIXES
 #endif // REHLDS_OPT_PEDANTIC
+
+		if (isMonster) {
+			if (touch->v.flags & FL_NOCLIP_MONSTERS)
+				continue;
+		}
+		else if (isPushable) {
+			if (touch->v.flags & FL_NOCLIP_PUSHABLES)
+				continue;
+		}
+		else if (touch->v.flags & FL_NOCLIP_EVERYTHING_ELSE) {
+			continue;
+		}
+		else if (clip->skipNoclipTraceEnts && (touch->v.flags & FL_NOCLIP_TRACES)) {
+			continue;
+		}
 
 		// monsterclip filter
 		if (touch->v.solid == SOLID_BSP)
@@ -1391,7 +1408,7 @@ trace_t SV_MoveNoEnts(const vec_t *start, vec_t *mins, vec_t *maxs, const vec_t 
 // nomonsters is used for line of sight or edge testing,
 // where mosnters shouldn't be considered solid objects
 // passedict is explicitly excluded from clipping checks (normally NULL)
-trace_t SV_Move(const vec_t *start, const vec_t *mins, const vec_t *maxs, const vec_t *end, int type, edict_t *passedict, qboolean monsterClipBrush)
+trace_t SV_Move(const vec_t *start, const vec_t *mins, const vec_t *maxs, const vec_t *end, int type, edict_t *passedict, qboolean monsterClipBrush, qboolean skipNoclipTraceEnts)
 {
 	moveclip_t clip;
 	vec3_t trace_endpos;
@@ -1414,6 +1431,7 @@ trace_t SV_Move(const vec_t *start, const vec_t *mins, const vec_t *maxs, const 
 		clip.ignoretrans = (type >> 8);
 		clip.passedict = passedict;
 		clip.monsterClipBrush = monsterClipBrush;
+		clip.skipNoclipTraceEnts = skipNoclipTraceEnts;
 
 		clip.mins = mins;
 		clip.maxs = maxs;
@@ -1506,6 +1524,7 @@ trace_t SV_Move_Point(const vec_t *start, const vec_t *end, int type, edict_t *p
 		clip.ignoretrans = (type >> 8);
 		clip.passedict = passedict;
 		clip.monsterClipBrush = FALSE;
+		clip.skipNoclipTraceEnts = TRUE;
 
 		clip.mins = vec3_origin;
 		clip.maxs = vec3_origin;

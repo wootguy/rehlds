@@ -576,6 +576,9 @@ void SV_AddLinksToPM_(areanode_t *node, float *pmove_mins, float *pmove_maxs)
 		if ((check->v.flags & FL_CLIENT) && check->v.health <= 0.0)
 			continue;
 
+		if ((check->v.flags & (FL_CLIENT | FL_NOCLIP_PLAYERS)) == FL_NOCLIP_PLAYERS)
+			continue;
+
 		if (check->v.mins[2] == 0.0 && check->v.maxs[2] == 1.0)
 			continue;
 
