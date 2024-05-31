@@ -861,6 +861,9 @@ void CalcSurfaceExtents(msurface_t *s)
 
 	tex = s->texinfo;
 
+	vec3_t avg;
+	avg[0] = avg[1] = avg[2] = 0;
+
 	for (i = 0; i < s->numedges; i++)
 	{
 		e = loadmodel->surfedges[s->firstedge + i];
@@ -868,6 +871,9 @@ void CalcSurfaceExtents(msurface_t *s)
 			v = &loadmodel->vertexes[loadmodel->edges[e].v[0]];
 		else
 			v = &loadmodel->vertexes[loadmodel->edges[-e].v[1]];
+
+		for (j = 0; j < 3; j++)
+			avg[j] += v->position[j];
 
 		for (j = 0; j < 2; j++)
 		{
@@ -884,6 +890,10 @@ void CalcSurfaceExtents(msurface_t *s)
 		}
 	}
 
+	for (j = 0; j < 3; j++) {
+		avg[j] /= (float)s->numedges;
+	}
+
 	for (i = 0; i < 2; i++)
 	{
 		bmins[i] = (int) floor(mins[i] / 16);
@@ -891,8 +901,11 @@ void CalcSurfaceExtents(msurface_t *s)
 
 		s->texturemins[i] = bmins[i] * 16;
 		s->extents[i] = (bmaxs[i] - bmins[i]) * 16;
-		if (!(tex->flags & TEX_SPECIAL) && s->extents[i] > 256)
-			Sys_Error("%s: Bad surface extents", __func__);
+		if (!(tex->flags & TEX_SPECIAL) && s->extents[i] > 256) {
+			Sys_Error("%s: Bad surface extents %d on %s at (%d %d %d)", 
+				__func__, s->extents[i]/16, s->texinfo->texture->name,
+				(int)avg[0], (int)avg[1], (int)avg[2]);
+		}
 	}
 }
 
