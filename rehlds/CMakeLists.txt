@@ -22,6 +22,7 @@ project(engine CXX)
 
 option(DEBUG "Build with debug information." OFF)
 option(USE_STATIC_LIBSTDC "Enables static linking libstdc++." OFF)
+option(ASAN "Build with AddressSanitizer Enabled" OFF)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +33,11 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
 set(COMPILE_FLAGS "-m32 -U_FORTIFY_SOURCE")
 set(LINK_FLAGS "-m32")
+
+if (ASAN)
+	set(COMPILE_FLAGS "${COMPILE_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+	set(LINK_FLAGS "${LINK_FLAGS} -fsanitize=address")
+endif()
 
 set(COMPILE_FLAGS "${COMPILE_FLAGS} -Wall -fno-rtti -fno-exceptions")
 
@@ -245,7 +251,7 @@ target_include_directories(engine PRIVATE
 target_compile_definitions(engine PRIVATE
 	SWDS
 	REHLDS_JIT
-	REHLDS_SSE
+	#REHLDS_SSE		# math_sse.cpp is causing stack corruption according to AddressSanitizer, disabling it for now
 	REHLDS_FIXES
 	REHLDS_CHECKS
 	REHLDS_API
@@ -264,7 +270,9 @@ target_compile_definitions(engine PRIVATE
 	_vsnwprintf=vswprintf
 
 	$<$<CONFIG:Unittests>:
-	REHLDS_UNIT_TESTS REHLDS_SSE REHLDS_JIT>
+	REHLDS_UNIT_TESTS 
+	#REHLDS_SSE 
+	REHLDS_JIT>
 )
 
 target_sources(engine PRIVATE

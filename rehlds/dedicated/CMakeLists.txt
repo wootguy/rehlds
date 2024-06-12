@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 project(hlds CXX)
 
 option(DEBUG "Build with debug information." OFF)
+option(ASAN "Build with AddressSanitizer Enabled" OFF)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,10 +10,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Avoid -rdynamic -fPIC options
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
-set(COMPILE_FLAGS "-m32 -U_FORTIFY_SOURCE")
+set(COMPILE_FLAGS "-m32 -U_FORTIFY_SOURCE ")
 set(LINK_FLAGS "-m32")
 
 set(COMPILE_FLAGS "${COMPILE_FLAGS} -Wall -fno-exceptions")
+
+if (ASAN)
+	set(COMPILE_FLAGS "${COMPILE_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+	set(LINK_FLAGS "${LINK_FLAGS} -fsanitize=address")
+endif()
 
 if (DEBUG)
 	set(COMPILE_FLAGS "${COMPILE_FLAGS} -g3 -O3 -ggdb")

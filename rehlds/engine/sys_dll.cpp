@@ -1059,7 +1059,7 @@ void LoadThisDll(const char *szDllFilename)
 	}
 #else // _WIN32
 #ifdef REHLDS_FIXES
-	void *hDLL = dlopen(szDllFilename, RTLD_NOW | RTLD_DEEPBIND | RTLD_LOCAL);
+	void *hDLL = dlopen(szDllFilename, RTLD_NOW | RTLD_LOCAL);
 #else // REHLDS_FIXES
 	void *hDLL = dlopen(szDllFilename, RTLD_NOW);
 #endif // REHLDS_FIXES

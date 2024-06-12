@@ -5647,7 +5647,7 @@ void SV_CreateBaseline(void)
 	MSG_WriteByte(&g_psv.signon, svc_spawnbaseline);
 	MSG_StartBitWriting(&g_psv.signon);
 
-	int sendEdicts = Q_min(sv_max_client_edicts.value, g_psv.num_edicts);
+	int sendEdicts = Q_min((int)sv_max_client_edicts.value, g_psv.num_edicts);
 
 	for (entnum = 0; entnum < sendEdicts; entnum++)
 	{
