@@ -169,7 +169,7 @@ void CM_CalcPAS(model_t *pModel)
 			continue;
 		}
 
-		for (j = 0; j < count; j++)
+		for (j = 0; j < count && (j >> 3) < gPVSRowBytes; j++)
 		{
 			if (scan[j >> 3] & (1 << (j & 7)))
 			{
@@ -223,7 +223,7 @@ void CM_CalcPAS(model_t *pModel)
 			continue;
 		}
 
-		for (j = 0; j < count; j++)
+		for (j = 0; j < count && (j >> 3) < gPVSRowBytes; j++)
 		{
 			if (((byte *)dest)[j >> 3] & (1 << (j & 7)))
 			{

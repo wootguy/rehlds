@@ -892,7 +892,13 @@ qboolean SV_ValidClientMulticast(client_t *client, int soundLeaf, int to)
 	}
 
 	int bitNumber = SV_PointLeafnum(clientOrigin);
-	if (mask[(bitNumber - 1) >> 3] & (1 << ((bitNumber - 1) & 7)))
+	int byteOffset = (bitNumber - 1) >> 3;
+
+	if (byteOffset < 0 || byteOffset >= gPVSRowBytes) {
+		return FALSE;
+	}
+
+	if (mask[byteOffset] & (1 << ((bitNumber - 1) & 7)))
 	{
 		return TRUE;
 	}
