@@ -52,6 +52,7 @@ cvar_t sv_stepsize = { "sv_stepsize", "18", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_ledgesize = { "sv_ledgesize", "18", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_friction = { "sv_friction", "4", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_stopspeed = { "sv_stopspeed", "100", FCVAR_SERVER, 0.0f, NULL };
+cvar_t sv_retouch = { "sv_retouch", "0", 0, 1.0f, nullptr };
 
 NOXREF void SV_CheckAllEnts()
 {
@@ -1057,8 +1058,15 @@ void SV_Physics_Toss(edict_t *ent)
 	{
 		VectorClear(ent->v.avelocity);
 
-		if (VectorIsZero(ent->v.basevelocity))
+		if (VectorIsZero(ent->v.basevelocity)) {
+
+			if (sv_retouch.value) {
+				// force retouch even for stationary
+				SV_LinkEdict(ent, TRUE);
+			}
+
 			return; // at rest
+		}
 	}
 
 	SV_CheckVelocity(ent);
@@ -1134,8 +1142,15 @@ void SV_Physics_Bounce(edict_t *ent)
 	{
 		VectorClear(ent->v.avelocity);
 
-		if (VectorIsZero(ent->v.basevelocity))
+		if (VectorIsZero(ent->v.basevelocity)) {
+
+			if (sv_retouch.value) {
+				// force retouch even for stationary
+				SV_LinkEdict(ent, TRUE);
+			}
+
 			return; // at rest
+		}
 	}
 
 	SV_CheckVelocity(ent);
@@ -1462,6 +1477,11 @@ void SV_Physics_Step(edict_t *ent)
 			{
 				SV_Impact(ent, trace.ent, &trace);
 			}
+		}
+
+		if (sv_retouch.value) {
+			// always run touch functions for triggers touched by stationary monsters
+			SV_LinkEdict(ent, TRUE);
 		}
 	}
 
