@@ -8142,6 +8142,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_lowercase);
 	Cvar_RegisterVariable(&sv_printcvar);
 	Cvar_RegisterVariable(&sv_max_client_edicts);
+	Cvar_RegisterVariable(&sv_retouch);
 #endif
 
 	for (int i = 0; i < MAX_MODELS; i++)

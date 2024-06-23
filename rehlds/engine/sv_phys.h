@@ -39,6 +39,7 @@ extern cvar_t sv_stepsize;
 extern cvar_t sv_ledgesize;
 extern cvar_t sv_friction;
 extern cvar_t sv_stopspeed;
+extern cvar_t sv_retouch;
 
 extern vec3_t *g_moved_from;
 extern edict_t **g_moved_edict;
