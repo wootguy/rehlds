@@ -46,7 +46,10 @@
 #define __HACK_LINE_AS_STRING__(x) CONST_INTEGER_AS_STRING(x) //__LINE__ can only be converted to an actual number by going through this, otherwise the output is literally "__LINE__"
 #define __LINE__AS_STRING __HACK_LINE_AS_STRING__(__LINE__) //Gives you the line number in constant string form
 
-#if defined _MSC_VER || defined __INTEL_COMPILER
+
+#ifdef __arm__
+#define NOXREFCHECK
+#elif defined _MSC_VER || defined __INTEL_COMPILER
 #define NOXREFCHECK			int __retAddr; __asm { __asm mov eax, [ebp + 4] __asm mov __retAddr, eax }; Sys_Error("[NOXREFCHECK]: %s: (" __FILE__ ":" __LINE__AS_STRING ") NOXREF, but called from 0x%.08x", __func__, __retAddr)
 #else
 // For EBP based stack (older gcc) (uncomment version apropriate for your compiler)

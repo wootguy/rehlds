@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.1)
 project(rehlds CXX)
 
+option(ARM32 "Build for ARM 32bit cpus" OFF)
+
 if (WIN32)
 	message(FATAL_ERROR "CMakeLists.txt Windows platform isn't supported yet. Use msvc/ReHLDS.sln instead it!")
 endif()

@@ -1860,7 +1860,7 @@ challenge_buf_t g_raw_challenge_buf;
 
 void SV_ChallengesInit()
 {
-#ifdef REHLDS_FIXES
+#if defined(REHLDS_FIXES) && !defined(__arm__)
 	static_assert(sizeof(g_raw_challenge_buf) == 64u, "Invalid g_raw_challenge_buf size");
 	for (uint32_t& s : g_raw_challenge_buf.salt)
 		s = __rdtsc() * rand();

@@ -29,6 +29,8 @@ misrepresented as being the original software.
 (this is the zlib license)
 */
 
+#ifndef __arm__
+
 #include "precompiled.h"
 
 /* natural logarithm computed for 4 simultaneous float
@@ -445,3 +447,5 @@ void sincos_ps(v4sf x, v4sf *s, v4sf *c) {
 	*s = _mm_xor_ps(xmm1, sign_bit_sin);
 	*c = _mm_xor_ps(xmm2, sign_bit_cos);
 }
+
+#endif

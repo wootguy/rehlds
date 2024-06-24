@@ -393,6 +393,25 @@ void MSG_WBits_MaybeFlush() {
 	bfwrite.nCurOutputBit -= 32;
 }
 
+#ifdef __arm__
+void MSG_WriteBits(uint32_t data, int numbits)
+{
+	uint32_t maxval = (1 << numbits) - 1;
+	if (data > maxval)
+		data = maxval;
+
+	MSG_WBits_MaybeFlush();
+
+	uint64_t* pendingPtr = &bfwrite.pendingData.u64;
+	uint64_t pending = *pendingPtr;
+
+	uint64_t mmdata = (uint64_t)data << bfwrite.nCurOutputBit;
+	pending |= mmdata;
+
+	*pendingPtr = pending;
+	bfwrite.nCurOutputBit += numbits;
+}
+#else
 void MSG_WriteBits(uint32 data, int numbits)
 {
 	uint32 maxval = _mm_cvtsi128_si32(_mm_slli_epi64(_mm_cvtsi32_si128(1), numbits)) - 1; //maxval = (1 << numbits) - 1
@@ -409,6 +428,7 @@ void MSG_WriteBits(uint32 data, int numbits)
 	_mm_store_si128((__m128i*) &bfwrite.pendingData.u64, pending);
 	bfwrite.nCurOutputBit += numbits;
 }
+#endif
 
 void MSG_WriteOneBit(int nValue) {
 	MSG_WriteBits(nValue, 1);

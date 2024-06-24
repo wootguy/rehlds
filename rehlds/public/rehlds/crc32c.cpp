@@ -14,7 +14,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "crc32c.h"
 #include "sys_shared.h"
+
+#ifndef __arm__
 #include "immintrin.h"
+#endif
 
 /*****************************************************************/
 /*                                                               */

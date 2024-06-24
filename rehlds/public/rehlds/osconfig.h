@@ -88,8 +88,10 @@
 #include <fstream>
 #include <iomanip>
 
+#ifndef __arm__ 
 #include <smmintrin.h>
 #include <xmmintrin.h>
+#endif
 
 
 #ifdef _WIN32 // WINDOWS
@@ -136,7 +138,11 @@
 		VirtualFree(ptr, 0, MEM_RELEASE);
 	}
 #else // _WIN32
-	#include <x86intrin.h>
+	#ifdef __arm__
+		#define _mm_prefetch(arg1, arg2)
+	#else 
+		#include <x86intrin.h>
+	#endif
 
 	#ifndef PAGESIZE
 		#define PAGESIZE 4096
@@ -161,7 +167,12 @@
 	#define NOINLINE __attribute__((noinline))
 	#define ALIGN16 __attribute__((aligned(16)))
 	#define NORETURN __attribute__((noreturn))
-	#define FORCE_STACK_ALIGN __attribute__((force_align_arg_pointer))
+	
+	#ifdef __arm__ 
+		#define FORCE_STACK_ALIGN
+	#else
+		#define FORCE_STACK_ALIGN __attribute__((force_align_arg_pointer))
+	#endif
 
 #if defined __INTEL_COMPILER
 	#define FUNC_TARGET(x)

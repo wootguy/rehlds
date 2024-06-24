@@ -31,8 +31,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "")
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
-set(COMPILE_FLAGS "-m32 -U_FORTIFY_SOURCE")
-set(LINK_FLAGS "-m32")
+if (ARM32)
+	set(COMPILE_FLAGS "-U_FORTIFY_SOURCE ")
+else()
+	set(COMPILE_FLAGS "-m32 -U_FORTIFY_SOURCE ")
+	set(LINK_FLAGS "-m32")
+endif()
 
 if (ASAN)
 	set(COMPILE_FLAGS "${COMPILE_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
@@ -70,12 +74,15 @@ else()
 	# Produce code optimized for the most common IA32/AMD64/EM64T processors.
 	# As new processors are deployed in the marketplace, the behavior of this option will change.
 	set(COMPILE_FLAGS "${COMPILE_FLAGS} \
-		-mtune=generic -msse3\
 		-fpermissive -fno-sized-deallocation\
 		-Wno-unknown-pragmas -Wno-invalid-offsetof\
 		-Wno-unused-variable -Wno-unused-result -Wno-unused-function -Wno-delete-non-virtual-dtor\
 		-Wno-write-strings -Wno-format\
 		-Wno-sign-compare -Wno-strict-aliasing -Wno-ignored-attributes")
+
+	if (NOT ARM32)
+		set(COMPILE_FLAGS "${COMPILE_FLAGS} -mtune=generic -msse3")
+	endif()
 
 	# Check if not Clang compiler
 	if (NOT "$ENV{CXX}" MATCHES "clang")

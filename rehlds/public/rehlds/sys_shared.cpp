@@ -27,7 +27,9 @@
 */
 #include "sys_shared.h"
 
-#if defined(__GNUC__)
+#ifdef __arm__
+
+#elif defined(__GNUC__)
 #include <cpuid.h>
 #elif _MSC_VER >= 1400 && !defined(ASMLIB_H)
 #include <intrin.h>	// __cpuidex
@@ -47,7 +49,9 @@ void Sys_CheckCpuInstructionsSupport(void)
 {
 	unsigned int cpuid_data[4];
 
-#if defined ASMLIB_H
+#if defined __arm__
+	memset(cpuid_data, 0, 4*sizeof(unsigned int));
+#elif defined ASMLIB_H
 	cpuid_ex((int *)cpuid_data, 1, 0);
 #elif defined(__GNUC__)
 	__get_cpuid(0x1, &cpuid_data[0], &cpuid_data[1], &cpuid_data[2], &cpuid_data[3]);
