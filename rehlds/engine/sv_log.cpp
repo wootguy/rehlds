@@ -108,7 +108,7 @@ void Log_Close(void)
 {
 	if (g_psvs.log.file)
 	{
-		Log_Printf("Log file closed\n");
+		Log_Printf("Log file closed\n\n-------------------------------------------------------------------------------\n\n");
 		FS_Close((FileHandle_t)g_psvs.log.file);
 	}
 	g_psvs.log.file = NULL;

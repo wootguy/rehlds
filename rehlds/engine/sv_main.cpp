@@ -2542,7 +2542,8 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 #endif
 	);
 
-	Log_Printf("\"%s<%i><%s><>\" connected, address \"%s\"\n", name, host_client->userid, SV_GetClientIDString(host_client), NET_AdrToString(host_client->netchan.remote_address));
+	// removed to let the game dll decide the log format
+	//Log_Printf("\"%s<%i><%s><>\" connected, address \"%s\"\n", name, host_client->userid, SV_GetClientIDString(host_client), NET_AdrToString(host_client->netchan.remote_address));
 #ifdef REHLDS_FIXES
 	Q_strncpy(host_client->userinfo, userinfo, MAX_INFO_STRING - 1);
 #else
@@ -7010,7 +7011,13 @@ void Host_Kick_f(void)
 						"Kick: \"%s<%i><%s><>\" was kicked by \"%s\" (message \"%s\")\n",
 						host_client->name, host_client->userid, SV_GetClientIDString(host_client), who,	message
 					);
-					SV_DropClient(host_client, 0, va("Kicked :%s", message));
+					if (strlen(message)) {
+						SV_DropClient(host_client, 0, va("%s", message));
+					}
+					else {
+						SV_DropClient(host_client, 0, va("Kicked :%s", message));
+					}
+					
 					host_client = save;
 					return;
 				}
