@@ -49,6 +49,7 @@ extern model_t* loadmodel;
 extern char loadname[MAX_MODEL_NAME];
 extern model_t mod_known[MAX_KNOWN_MODELS];
 extern int mod_numknown;
+extern bool mod_pending_flush;
 extern unsigned char* mod_base;
 extern char *wadpath;
 extern int tested;

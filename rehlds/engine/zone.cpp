@@ -689,6 +689,14 @@ void Cache_Flush()
 	}
 }
 
+// flushe cache and loaded model info
+void Cache_Flush_mcache()
+{
+	Cache_Force_Flush();
+	mod_pending_flush = true;
+	Con_Printf("Cache flushed. mcache cleared on next map load.\n");
+}
+
 // Compares the names of two cache_system_t structs.
 // Used with qsort()
 NOXREF int CacheSystemCompare(const void *ppcs1, const void *ppcs2)
@@ -782,6 +790,7 @@ void Cache_Init()
 	cache_head.lru_next = cache_head.lru_prev = &cache_head;
 
 	Cmd_AddCommand("flush", Cache_Flush);
+	Cmd_AddCommand("flush_mcache", Cache_Flush_mcache);
 }
 
 // Frees the memory and removes it from the LRU list

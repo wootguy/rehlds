@@ -32,6 +32,7 @@ model_t *loadmodel;
 char loadname[MAX_MODEL_NAME];
 model_t mod_known[MAX_KNOWN_MODELS];
 int mod_numknown;
+bool mod_pending_flush;
 unsigned char* mod_base;
 char *wadpath;
 int tested;
@@ -122,6 +123,13 @@ void Mod_ClearAll(void)
 			if (mod->type == mod_sprite)
 				mod->cache.data = NULL;
 		}
+	}
+
+	if (mod_pending_flush) {
+		mod_numknown = 0;
+		mod_pending_flush = false;
+		memset(mod_known, 0, sizeof(model_t) * MAX_KNOWN_MODELS);
+		memset(mod_known_info, 0, sizeof(mod_known_info_t) * MAX_KNOWN_MODELS);
 	}
 }
 
@@ -1887,7 +1895,7 @@ void Mod_Print(void)
 {
 	int i;
 	model_t *mod;
-	Con_Printf("Cached models:\n");
+	Con_Printf("Cached models (%d):\n", mod_numknown);
 	for (i = 0, mod = mod_known; i < mod_numknown; i++, mod++)
 	{
 		Con_Printf("%8p : %s", mod->cache.data, mod->name);
