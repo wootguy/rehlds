@@ -20,7 +20,11 @@
 #endif
 
 #include "archtypes.h"     // DAL
+#if defined(INCREASED_SERVER_LIMITS)
+#define	MAX_PHYSENTS 2048 		  // Server library must match this value or else it instantly crashes
+#else
 #define	MAX_PHYSENTS 600 		  // Must have room for all entities in the world.
+#endif
 #define MAX_MOVEENTS 64
 #define	MAX_CLIP_PLANES	5
 

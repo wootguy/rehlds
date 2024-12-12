@@ -3,6 +3,8 @@ project(hlds CXX)
 
 option(DEBUG "Build with debug information." OFF)
 option(ASAN "Build with AddressSanitizer Enabled" OFF)
+option(ASAN "Build with AddressSanitizer Enabled" OFF)
+option(INCREASED_SERVER_LIMITS "Build a rehlds with increased limits (server crashes instantly if this does not match server library)" ON)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -110,6 +112,10 @@ target_compile_definitions(hlds PRIVATE
 	_strdup=strdup
 	_vsnprintf=vsnprintf
 )
+
+if (INCREASED_SERVER_LIMITS)
+	target_compile_definitions(hlds PRIVATE INCREASED_SERVER_LIMITS)
+endif()
 
 target_sources(hlds PRIVATE
 	${COMMON_SRCS}
