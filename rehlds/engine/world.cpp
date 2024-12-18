@@ -1192,19 +1192,22 @@ void SV_ClipToLinks(areanode_t *node, moveclip_t *clip)
 #endif // REHLDS_FIXES
 #endif // REHLDS_OPT_PEDANTIC
 
-		if (isMonster) {
-			if (touch->v.flags & FL_NOCLIP_MONSTERS)
+		if (!(touch->v.flags & FL_CLIENT)) {
+			// these flags apply to non-clients only because they repurpose client-specific flags
+			if (isMonster) {
+				if (touch->v.flags & FL_NOCLIP_MONSTERS)
+					continue;
+			}
+			else if (isPushable) {
+				if (touch->v.flags & FL_NOCLIP_PUSHABLES)
+					continue;
+			}
+			else if (touch->v.flags & FL_NOCLIP_EVERYTHING_ELSE) {
 				continue;
-		}
-		else if (isPushable) {
-			if (touch->v.flags & FL_NOCLIP_PUSHABLES)
+			}
+			else if (clip->skipNoclipTraceEnts && (touch->v.flags & FL_NOCLIP_TRACES)) {
 				continue;
-		}
-		else if (touch->v.flags & FL_NOCLIP_EVERYTHING_ELSE) {
-			continue;
-		}
-		else if (clip->skipNoclipTraceEnts && (touch->v.flags & FL_NOCLIP_TRACES)) {
-			continue;
+			}
 		}
 
 		// monsterclip filter
