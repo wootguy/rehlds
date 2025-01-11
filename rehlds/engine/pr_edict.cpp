@@ -252,10 +252,13 @@ char *ED_ParseEdict(char *data, edict_t *ent)
 				Host_Error("%s: closing brace without data", __func__);
 			}
 
+			// why shouldn't I be able to name a game_end "game_end" ?
+			/*
 			if (className != NULL && !Q_strcmp(className, com_token))
 			{
 				continue;
 			}
+			*/
 
 			if (!Q_strcmp(keyname, "angle"))
 			{
