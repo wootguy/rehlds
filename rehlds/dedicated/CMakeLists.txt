@@ -23,7 +23,7 @@ if (ASAN)
 endif()
 
 if (DEBUG)
-	set(COMPILE_FLAGS "${COMPILE_FLAGS} -g3 -O3 -ggdb")
+	set(COMPILE_FLAGS "${COMPILE_FLAGS} -g3 -O2 -ggdb -fno-omit-frame-pointer")
 else()
 	set(COMPILE_FLAGS "${COMPILE_FLAGS} -g0 -O3 -fno-stack-protector")
 endif()
