@@ -28,6 +28,8 @@
 
 #include "precompiled.h"
 
+extern cvar_t sv_precache_bspmodels;
+
 void ED_ClearEdict(edict_t *e)
 {
 	Q_memset(&e->v, 0, sizeof(e->v));
@@ -282,7 +284,7 @@ char *ED_ParseEdict(char *data, edict_t *ent)
 			else if (!Q_strcmp(keyname, "model"))
 			{
 				// local model?
-				if (com_token[0] == '*')
+				if (sv_precache_bspmodels.value && com_token[0] == '*')
 				{
 					// make sure that local model not pre-cached yet
 					if (!SV_LookupModelIndex(com_token))

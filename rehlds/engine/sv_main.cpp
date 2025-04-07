@@ -217,6 +217,7 @@ cvar_t sv_rehlds_maxclients_from_single_ip = { "sv_rehlds_maxclients_from_single
 cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
 cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
+cvar_t sv_precache_bspmodels = { "sv_precache_bspmodels", "1", 0, 1.0f, nullptr };
 cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
 cvar_t sv_max_client_edicts = { "sv_max_client_edicts", "1665", 0, 1.0f, nullptr };
 #endif
@@ -5490,7 +5491,7 @@ void SV_CreateResourceList(void)
 		}
 	}
 #ifdef REHLDS_CHECKS
-	for (i = 1, s = &g_psv.model_precache[1]; i < MAX_MODELS && *s != NULL; i++, s++)
+	for (i = 1, s = &g_psv.model_precache[1]; i < MAX_MODELS_CLIENT && *s != NULL; i++, s++)
 #else // REHLDS_CHECKS
 	for (i = 1, s = &g_psv.model_precache[1]; *s != NULL; i++, s++)
 #endif // REHLDS_CHECKS
@@ -8147,6 +8148,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_use_entity_file);
 	Cvar_RegisterVariable(&sv_usercmd_custom_random_seed);
 	Cvar_RegisterVariable(&sv_lowercase);
+	Cvar_RegisterVariable(&sv_precache_bspmodels);
 	Cvar_RegisterVariable(&sv_printcvar);
 	Cvar_RegisterVariable(&sv_max_client_edicts);
 	Cvar_RegisterVariable(&sv_retouch);
