@@ -28,7 +28,7 @@ constexpr auto MAX_LIGHTSTYLE_SIZE = size_t{64};
 
 // Resource counts
 #define MAX_MODEL_INDEX_BITS		9	// sent as a short
-#define MAX_MODELS_CLIENT	(1<<MAX_MODEL_INDEX_BITS)
+#define MAX_MODELS_CLIENT	510
 #define MAX_MODELS			8192 // allow more models to be precached for server-side use only
 #define MAX_SOUND_INDEX_BITS		9
 #define MAX_SOUNDS			(1<<MAX_SOUND_INDEX_BITS)
