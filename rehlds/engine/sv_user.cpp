@@ -559,6 +559,10 @@ void SV_AddLinksToPM_(areanode_t *node, float *pmove_mins, float *pmove_maxs)
 			continue;
 		}
 
+		if (pmove->numvisent >= MAX_PHYSENTS) {
+			break;
+		}
+
 		e = NUM_FOR_EDICT(check);
 		ve = &pmove->visents[pmove->numvisent];
 		pmove->numvisent = pmove->numvisent + 1;
