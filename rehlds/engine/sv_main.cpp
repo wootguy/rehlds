@@ -220,6 +220,7 @@ cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
 cvar_t sv_precache_bspmodels = { "sv_precache_bspmodels", "1", 0, 1.0f, nullptr };
 cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
 cvar_t sv_max_client_edicts = { "sv_max_client_edicts", "1665", 0, 1.0f, nullptr };
+cvar_t sv_steam_auth = { "sv_steam_auth", "1", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -2452,7 +2453,35 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 		}
 
 		client->netchan.remote_address.port = adr.port ? adr.port : port;
-		if (!Steam_NotifyClientConnect(client, szSteamAuthBuf, len))
+		
+		if (sv_steam_auth.value != 1) {
+			host_client->network_userid.idtype = AUTH_IDTYPE_STEAM;
+
+			if (sv_steam_auth.value == 0) {
+				// generate a new ID per connection (xash sends an invalid ID)
+				static uint64_t randomId = 2000000001;
+				host_client->network_userid.m_SteamID = 76561197960265728ULL + randomId;
+				randomId += 2;
+			}
+			else {
+				// extract from steam ticket
+				host_client->network_userid.m_SteamID = *(uint64_t*)(szSteamAuthBuf + sizeof(uint32_t) * 3);
+			}
+
+			if (SV_FilterUser(&host_client->network_userid))
+			{
+				char msg[256];
+				sprintf(msg, "You have been banned from this server\n");
+				SV_RejectConnection(&adr, msg);
+			}
+			else if (SV_CheckForDuplicateSteamID(host_client) != -1)
+			{
+				char msg[256];
+				sprintf(msg, "Your UserID is already in use on this server.\n");
+				SV_RejectConnection(&adr, msg);
+			}
+		}
+		else if (!Steam_NotifyClientConnect(client, szSteamAuthBuf, len))
 		{
 			if (sv_lan.value == 0.0f)
 			{
@@ -8151,6 +8180,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_precache_bspmodels);
 	Cvar_RegisterVariable(&sv_printcvar);
 	Cvar_RegisterVariable(&sv_max_client_edicts);
+	Cvar_RegisterVariable(&sv_steam_auth);
 	Cvar_RegisterVariable(&sv_retouch);
 #endif
 
