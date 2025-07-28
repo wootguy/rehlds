@@ -1217,6 +1217,10 @@ void SV_SendServerinfo_internal(sizebuf_t *msg, client_t *client)
 	client->fully_connected = FALSE;
 }
 
+bool SV_ShouldSendResource(resource_t* res, uint64_t steamid) {
+	return true;
+}
+
 void SV_SendResources(sizebuf_t *msg)
 {
 	unsigned char nullbuffer[32];
@@ -1236,6 +1240,18 @@ void SV_SendResources(sizebuf_t *msg)
 	MSG_StartBitWriting(msg);
 	MSG_WriteBits(g_psv.num_resources, RESOURCE_INDEX_BITS);
 
+	uint64_t steamid64 = host_client->network_userid.m_SteamID;
+
+	// set up a resource that won't trigger any downloads and won't mess up resource indexes
+	// if only sent to specific players
+	static resource_t skipResource;
+	if (!skipResource.type) {
+		memset(&skipResource, 0, sizeof(resource_t));
+		Q_strcpy_s(skipResource.szFileName, "DownloadSkipped");
+		skipResource.type = t_decal;
+		skipResource.nIndex = 4095;
+	}
+
 #ifdef REHLDS_FIXES
 	resource_t *r = g_rehlds_sv.resources;
 #else // REHLDS_FIXES
@@ -1243,25 +1259,31 @@ void SV_SendResources(sizebuf_t *msg)
 #endif
 	for (int i = 0; i < g_psv.num_resources; i++, r++)
 	{
-		MSG_WriteBits(r->type, 4);
-		MSG_WriteBitString(r->szFileName);
-		MSG_WriteBits(r->nIndex, RESOURCE_INDEX_BITS);
-		MSG_WriteBits(r->nDownloadSize, 24);
-		MSG_WriteBits(r->ucFlags & (RES_WASMISSING | RES_FATALIFMISSING), 3);
+		resource_t* res = r;
+		if (!g_RehldsHookchains.m_ShouldSendResource.callChain(SV_ShouldSendResource, r, steamid64)) {
+			// player does not want this resource
+			res = &skipResource;
+		}
+
+		MSG_WriteBits(res->type, 4);
+		MSG_WriteBitString(res->szFileName);
+		MSG_WriteBits(res->nIndex, RESOURCE_INDEX_BITS);
+		MSG_WriteBits(res->nDownloadSize, 24);
+		MSG_WriteBits(res->ucFlags & (RES_WASMISSING | RES_FATALIFMISSING), 3);
 
 		if (r->ucFlags & RES_CUSTOM)
 		{
-			MSG_WriteBitData(r->rgucMD5_hash, sizeof(r->rgucMD5_hash));
+			MSG_WriteBitData(res->rgucMD5_hash, sizeof(res->rgucMD5_hash));
 		}
 
-		if (!Q_memcmp(r->rguc_reserved, nullbuffer, sizeof(r->rguc_reserved)))
+		if (!Q_memcmp(res->rguc_reserved, nullbuffer, sizeof(res->rguc_reserved)))
 		{
 			MSG_WriteBits(0, 1);
 		}
 		else
 		{
 			MSG_WriteBits(1, 1);
-			MSG_WriteBitData(r->rguc_reserved, sizeof(r->rguc_reserved));
+			MSG_WriteBitData(res->rguc_reserved, sizeof(res->rguc_reserved));
 		}
 	}
 
