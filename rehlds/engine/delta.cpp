@@ -720,7 +720,8 @@ void DELTA_WriteMarkedFields(unsigned char *from, unsigned char *to, delta_t *pF
 			break;
 		}
 		case DT_STRING:
-			MSG_WriteBitString((const char *)&to[pTest->fieldOffset]);
+			//MSG_WriteBitString((const char *)&to[pTest->fieldOffset]);
+			MSG_WriteBitString_hackfix((const char*)&to[pTest->fieldOffset]);
 			break;
 		default:
 			Con_Printf("%s: unknown send field type\n", __func__);

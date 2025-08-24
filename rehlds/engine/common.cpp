@@ -573,6 +573,26 @@ void MSG_WriteBitString(const char *p)
 	MSG_WriteBits(0, 8);
 }
 
+void MSG_WriteBitString_hackfix(const char* p)
+{
+	const uint8_t* pch = (uint8_t*)p;
+
+	while (*pch)
+	{
+		MSG_WriteBits(*pch, 8);
+		++pch;
+	}
+
+	// client engine bug workaround for physinfo deltas.
+	// The client sometimes adds extra 0's at the end of the pyhsics string, which changes the value
+	// of a keyvalue pair (example: "\\hl\\1\\jmp\\0\\slj\\100"). 100 != 1 so the prediction check
+	// fails for long jumping. This separator prevents the trailing 0's merging with a key value.
+	// This will also affect any delta.lst values that use "DT_STRING". There are none for HL.
+	MSG_WriteBits('\\', 8);
+
+	MSG_WriteBits(0, 8);
+}
+
 void MSG_WriteBitData(void *src, int length)
 {
 	int i;

@@ -122,6 +122,7 @@ void MSG_EndBitWriting(sizebuf_t *buf);
 void MSG_WriteBits(uint32 data, int numbits);
 void MSG_WriteSBits(int data, int numbits);
 void MSG_WriteBitString(const char *p);
+void MSG_WriteBitString_hackfix(const char *p);
 void MSG_WriteBitData(void *src, int length);
 void MSG_WriteBitAngle(float fAngle, int numbits);
 float MSG_ReadBitAngle(int numbits);
