@@ -3251,9 +3251,10 @@ void Host_InitCommands(void)
 	Cmd_AddCommand("setinfo", Host_SetInfo_f);
 	Cmd_AddCommand("fullinfo", Host_FullInfo_f);
 
-	Cmd_AddCommand("god", Host_God_f);
-	Cmd_AddCommand("notarget", Host_Notarget_f);
-	Cmd_AddCommand("noclip", Host_Noclip_f);
+	// Disabled so sevenkewp server can override
+	//Cmd_AddCommand("god", Host_God_f);
+	//Cmd_AddCommand("notarget", Host_Notarget_f);
+	//Cmd_AddCommand("noclip", Host_Noclip_f);
 
 #ifndef SWDS
 	Cmd_AddCommand("fly", Host_Fly_f);
