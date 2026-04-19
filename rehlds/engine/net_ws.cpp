@@ -858,6 +858,11 @@ qboolean NET_GetLong(unsigned char *pData, int size, int *outSize)
 	}
 }
 
+int EXT_FUNC NET_RecvAdditionalPacket(uint8* buffer, unsigned int bufferLen, netadr_t& from)
+{
+	return -1;
+}
+
 qboolean NET_QueuePacket(netsrc_t sock)
 {
 #ifdef REHLDS_FIXES
@@ -867,27 +872,45 @@ qboolean NET_QueuePacket(netsrc_t sock)
 		int ret = -1;
 		unsigned char buf[MAX_UDP_PACKET];
 
+
 #ifdef _WIN32
-		for (int protocol = 0; protocol < 2; protocol++)
+		const int hookProtocol = 2;
+		for (int protocol = 0; protocol < 3; protocol++)
 #else
-		for (int protocol = 0; protocol < 1; protocol++)
+		const int hookProtocol = 1;
+		for (int protocol = 0; protocol < 2; protocol++)
 #endif // _WIN32
 		{
-			SOCKET net_socket = INV_SOCK;
+			struct sockaddr from;
 
-			if (protocol == 0)
-				net_socket = ip_sockets[sock];
+			if (protocol != hookProtocol) {
+				SOCKET net_socket = INV_SOCK;
+
+				if (protocol == 0)
+					net_socket = ip_sockets[sock];
 #ifdef _WIN32
-			else
-				net_socket = ipx_sockets[sock];
+				else
+					net_socket = ipx_sockets[sock];
 #endif // _WIN32
 
-			if (net_socket == INV_SOCK)
-				continue;
+				if (net_socket == INV_SOCK)
+					continue;
 
-			struct sockaddr from;
-			socklen_t fromlen = sizeof(from);
-			ret = CRehldsPlatformHolder::get()->recvfrom(net_socket, (char *)buf, sizeof buf, 0, &from, &fromlen);
+				socklen_t fromlen = sizeof(from);
+				ret = CRehldsPlatformHolder::get()->recvfrom(net_socket, (char*)buf, sizeof buf, 0, &from, &fromlen);
+			}
+			else {
+				// Try receiving on other ports (for crossplay/proxy)
+				netadr_t addrfrom;
+				ret = g_RehldsHookchains.m_RecvAdditionalPacket.callChain(NET_RecvAdditionalPacket, buf, sizeof buf, addrfrom);
+				if (ret > 0)
+					NetadrToSockadr(&addrfrom, &from);
+
+				// plugin should do its own error handling
+				if (ret == -1)
+					continue;
+			}
+
 			if (ret == -1)
 			{
 				int err = NET_GetLastError();
@@ -1301,9 +1324,18 @@ void NET_FlushQueues()
 	normalqueue = NULL;
 }
 
+int EXT_FUNC NET_SendPacketDummy(uint8* buffer, unsigned int bufferLen, const netadr_t& from)
+{
+	return false;
+}
+
 int NET_SendLong(netsrc_t sock, SOCKET s, const char *buf, int len, int flags, const struct sockaddr *to, int tolen)
 {
 	static long gSequenceNumber = 1;
+
+	netadr_t adr;
+	Q_memset(&adr, 0, sizeof(adr));
+	SockadrToNetadr((struct sockaddr*)to, &adr);
 
 	// Do we need to break this packet up?
 	if (sock == NS_SERVER && len > MAX_ROUTEABLE_PACKET)
@@ -1333,11 +1365,6 @@ int NET_SendLong(netsrc_t sock, SOCKET s, const char *buf, int len, int flags, c
 
 			if (net_showpackets.value == 4.0f)
 			{
-				netadr_t adr;
-				Q_memset(&adr, 0, sizeof(adr));
-
-				SockadrToNetadr((struct sockaddr *)to, &adr);
-
 				Con_DPrintf("Sending split %i of %i with %i bytes and seq %i to %s\n",
 					packetNumber + 1,
 					packetCount,
@@ -1346,7 +1373,12 @@ int NET_SendLong(netsrc_t sock, SOCKET s, const char *buf, int len, int flags, c
 					NET_AdrToString(adr));
 			}
 
-			int ret = CRehldsPlatformHolder::get()->sendto(s, packet, size + sizeof(SPLITPACKET), flags, to, tolen);
+			int ret = g_RehldsHookchains.m_SendPacket.callChain(NET_SendPacketDummy, (byte*)packet, size + sizeof(SPLITPACKET), adr);
+
+			if (ret == 0) {
+				ret = CRehldsPlatformHolder::get()->sendto(s, packet, size + sizeof(SPLITPACKET), flags, to, tolen);
+			}
+
 			if (ret < 0)
 			{
 				return ret;
@@ -1364,7 +1396,11 @@ int NET_SendLong(netsrc_t sock, SOCKET s, const char *buf, int len, int flags, c
 		return totalSent;
 	}
 
-	int nSend = CRehldsPlatformHolder::get()->sendto(s, buf, len, flags, to, tolen);
+	int nSend = g_RehldsHookchains.m_SendPacket.callChain(NET_SendPacketDummy, (byte*)buf, len, adr);
+	
+	if (!nSend)
+		CRehldsPlatformHolder::get()->sendto(s, buf, len, flags, to, tolen);
+
 	return nSend;
 }
 
@@ -1376,6 +1412,7 @@ void EXT_FUNC NET_SendPacket_api(unsigned int length, void *data, const netadr_t
 
 void NET_SendPacket(netsrc_t sock, int length, void *data, const netadr_t& to)
 {
+
 	if (to.type == NA_LOOPBACK)
 	{
 		NET_SendLoopPacket(sock, length, data, to);

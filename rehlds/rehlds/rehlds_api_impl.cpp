@@ -458,6 +458,9 @@ void EXT_FUNC RemoveCvarListener_api(const char *var_name, cvar_callback_t func)
 	}
 }
 
+void EXT_FUNC PF_MessageEnd_Unregistered(bool variableLength);
+void EXT_FUNC PF_ReconnectClient(edict_t* ed);
+
 CRehldsServerStatic g_RehldsServerStatic;
 CRehldsServerData g_RehldsServerData;
 CRehldsHookchains g_RehldsHookchains;
@@ -561,7 +564,9 @@ RehldsFuncs_t g_RehldsApiFuncs =
 	&SZ_Clear_api,
 	&MSG_BeginReading_api,
 	&GetHostFrameTime_api,
-	&GetFirstCmdFunctionHandle_api
+	&GetFirstCmdFunctionHandle_api,
+	&PF_MessageEnd_Unregistered,
+	&PF_ReconnectClient
 };
 
 bool EXT_FUNC SV_EmitSound2_internal(edict_t *entity, IGameClient *pReceiver, int channel, const char *sample, float volume, float attenuation, int flags, int pitch, int emitFlags, const float *pOrigin)
@@ -718,6 +723,14 @@ IRehldsHookRegistry_Steam_NotifyClientDisconnect* CRehldsHookchains::Steam_Notif
 
 IRehldsHookRegistry_PreprocessPacket* CRehldsHookchains::PreprocessPacket() {
 	return &m_PreprocessPacket;
+}
+
+IRehldsHookRegistry_RecvAdditionalPacket* CRehldsHookchains::RecvAdditionalPacket() {
+	return &m_RecvAdditionalPacket;
+}
+
+IRehldsHookRegistry_SendPacket* CRehldsHookchains::SendPacket() {
+	return &m_SendPacket;
 }
 
 IRehldsHookRegistry_ValidateCommand* CRehldsHookchains::ValidateCommand() {

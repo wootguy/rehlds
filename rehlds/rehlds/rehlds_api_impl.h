@@ -90,6 +90,14 @@ typedef IVoidHookChainRegistryImpl<IGameClient*> CRehldsHookRegistry_Steam_Notif
 typedef IHookChainImpl<bool, uint8*, unsigned int, const netadr_t&> CRehldsHook_PreprocessPacket;
 typedef IHookChainRegistryImpl<bool, uint8*, unsigned int, const netadr_t&> CRehldsHookRegistry_PreprocessPacket;
 
+//RecvAdditionalPacket
+typedef IHookChainImpl<int, uint8*, unsigned int, netadr_t& > CRehldsHook_RecvAdditionalPacket;
+typedef IHookChainRegistryImpl<int, uint8*, unsigned int, netadr_t& > CRehldsHookRegistry_RecvAdditionalPacket;
+
+//SendPacket
+typedef IHookChainImpl<int, uint8*, unsigned int, const netadr_t& > CRehldsHook_SendPacket;
+typedef IHookChainRegistryImpl<int, uint8*, unsigned int, const netadr_t& > CRehldsHookRegistry_SendPacket;
+
 //ValidateCommand
 typedef IHookChainImpl<bool, const char*, cmd_source_t, IGameClient*> CRehldsHook_ValidateCommand;
 typedef IHookChainRegistryImpl<bool, const char*, cmd_source_t, IGameClient*> CRehldsHookRegistry_ValidateCommand;
@@ -273,6 +281,8 @@ public:
 	CRehldsHookRegistry_SV_CompareUserID m_SV_CompareUserID;
 	CRehldsHookRegistry_Steam_NotifyClientDisconnect m_Steam_NotifyClientDisconnect;
 	CRehldsHookRegistry_PreprocessPacket m_PreprocessPacket;
+	CRehldsHookRegistry_RecvAdditionalPacket m_RecvAdditionalPacket;
+	CRehldsHookRegistry_SendPacket m_SendPacket;
 	CRehldsHookRegistry_ValidateCommand m_ValidateCommand;
 	CRehldsHookRegistry_ClientConnected m_ClientConnected;
 	CRehldsHookRegistry_HandleNetCommand m_HandleNetCommand;
@@ -331,6 +341,8 @@ public:
 	EXT_FUNC virtual IRehldsHookRegistry_SV_CompareUserID* SV_CompareUserID();
 	EXT_FUNC virtual IRehldsHookRegistry_Steam_NotifyClientDisconnect* Steam_NotifyClientDisconnect();
 	EXT_FUNC virtual IRehldsHookRegistry_PreprocessPacket* PreprocessPacket();
+	EXT_FUNC virtual IRehldsHookRegistry_RecvAdditionalPacket* RecvAdditionalPacket();
+	EXT_FUNC virtual IRehldsHookRegistry_SendPacket* SendPacket();
 	EXT_FUNC virtual IRehldsHookRegistry_ValidateCommand* ValidateCommand();
 	EXT_FUNC virtual IRehldsHookRegistry_ClientConnected* ClientConnected();
 	EXT_FUNC virtual IRehldsHookRegistry_HandleNetCommand* HandleNetCommand();

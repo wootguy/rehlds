@@ -95,6 +95,14 @@ typedef IVoidHookChainRegistry<IGameClient*> IRehldsHookRegistry_Steam_NotifyCli
 typedef IHookChain<bool, uint8*, unsigned int, const netadr_t&> IRehldsHook_PreprocessPacket;
 typedef IHookChainRegistry<bool, uint8*, unsigned int, const netadr_t&> IRehldsHookRegistry_PreprocessPacket;
 
+//RecvAdditionalPacket
+typedef IHookChain<int, uint8*, unsigned int, netadr_t&> IRehldsHook_RecvAdditionalPacket;
+typedef IHookChainRegistry<int, uint8*, unsigned int, netadr_t&> IRehldsHookRegistry_RecvAdditionalPacket;
+
+//SendPacket
+typedef IHookChain<int, uint8*, unsigned int, const netadr_t&> IRehldsHook_SendPacket;
+typedef IHookChainRegistry<int, uint8*, unsigned int, const netadr_t&> IRehldsHookRegistry_SendPacket;
+
 //ValidateCommand
 typedef IHookChain<bool, const char*, cmd_source_t, IGameClient*> IRehldsHook_ValidateCommand;
 typedef IHookChainRegistry<bool, const char*, cmd_source_t, IGameClient*> IRehldsHookRegistry_ValidateCommand;
@@ -280,6 +288,8 @@ public:
 	virtual IRehldsHookRegistry_SV_CompareUserID* SV_CompareUserID() = 0;
 	virtual IRehldsHookRegistry_Steam_NotifyClientDisconnect* Steam_NotifyClientDisconnect() = 0;
 	virtual IRehldsHookRegistry_PreprocessPacket* PreprocessPacket() = 0;
+	virtual IRehldsHookRegistry_RecvAdditionalPacket* RecvAdditionalPacket() = 0;
+	virtual IRehldsHookRegistry_SendPacket* SendPacket() = 0;
 	virtual IRehldsHookRegistry_ValidateCommand* ValidateCommand() = 0;
 	virtual IRehldsHookRegistry_ClientConnected* ClientConnected() = 0;
 	virtual IRehldsHookRegistry_HandleNetCommand* HandleNetCommand() = 0;
@@ -432,6 +442,9 @@ struct RehldsFuncs_t {
 	void(*MSG_BeginReading)();
 	double(*GetHostFrameTime)();
 	struct cmd_function_s *(*GetFirstCmdFunctionHandle)();
+
+	void (*MessageEnd_Unregistered)(bool variableLength);
+	void (*ReconnectClient)(edict_t* ed);
 };
 
 class IRehldsApi {

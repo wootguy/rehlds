@@ -1145,6 +1145,67 @@ const char *Host_FindRecentSave(char *pNameBuf)
 	return found != 0 ? pNameBuf : NULL;
 }
 
+void EXT_FUNC PF_ReconnectClient(edict_t* ed) {
+	unsigned char data[NET_MAX_PAYLOAD];
+
+	sizebuf_t msg;
+	client_t* cl;
+	UserMsg* pTemp;
+	char szCommand[256];
+
+	Q_memset(&msg, 0, sizeof(sizebuf_t));
+	msg.buffername = "Activate Server";
+	msg.data = data;
+	msg.maxsize = sizeof(data);
+	msg.cursize = 0;
+	msg.flags = SIZEBUF_CHECK_OVERFLOW;
+
+	int i;
+	for (i = 0, cl = g_psvs.clients; i < g_psvs.maxclients; cl++, i++)
+	{
+		if (cl->edict == ed && !cl->fakeclient && (cl->active || cl->connected))
+		{
+			// inactivate the client
+			cl->active = FALSE;
+			cl->connected = TRUE;
+			cl->spawned = FALSE;
+			cl->fully_connected = FALSE;
+			cl->hasusrmsgs = FALSE;
+			cl->m_bSentNewResponse = FALSE;
+			SZ_Clear(&cl->netchan.message);
+			SZ_Clear(&cl->datagram);
+			COM_ClearCustomizationList(&cl->customdata, FALSE);
+			Q_memset(cl->physinfo, 0, MAX_PHYSINFO_STRING);
+			Netchan_Clear(&cl->netchan);
+
+			netadr_t adr = cl->netchan.remote_address;
+			int oldOutgoingSeq = cl->netchan.outgoing_sequence;
+			Netchan_Setup(NS_SERVER, &cl->netchan, adr, i, cl, SV_GetFragmentSize);
+			cl->netchan.outgoing_sequence = 0x1fffffff;
+
+			// you could send a "reconnect" command here, and it would work, but that reuses
+			// the existing connection which is a problem for some use cases.
+			//MSG_WriteByte(&cl->netchan.message, svc_stufftext);
+			//MSG_WriteString(&cl->netchan.message, "reconnect\n");
+			
+			MSG_WriteByte(&msg, svc_nop);
+
+			Netchan_CreateFragments(TRUE, &cl->netchan, &msg);
+			Netchan_FragSend(&cl->netchan);
+
+			// HACK: corrupt a fragment ID so the client triggers a full reconnect with this error:
+			// "Netchan_CheckForCompletion:  Lost/dropped fragment would cause stall, retrying connection"
+			// Now you can hard restart the server and/or get a new steam ticket from the client.
+			cl->netchan.fragbufs[0]->bufferid += 10;
+
+			// send fragments now
+			Netchan_Transmit(&cl->netchan, 0, NULL);
+
+			SZ_Clear(&msg);
+		}
+	}
+}
+
 void Host_Restart_f(void)
 {
 	char name[MAX_PATH];
