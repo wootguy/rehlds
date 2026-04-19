@@ -87,6 +87,8 @@ extern cache_user_t *loadcache;
 extern unsigned char *loadbuf;
 extern int loadsize;
 
+extern bool g_enableDeltaStringHackFix;
+
 int build_number(void);
 char *Info_Serverinfo(void);
 

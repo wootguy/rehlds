@@ -1351,7 +1351,9 @@ void SV_WriteClientdataToMessage(client_t *client, sizebuf_t *msg)
 		from = &host_client->frames[bits].clientdata;
 	}
 
+	g_enableDeltaStringHackFix = true;
 	DELTA_WriteDelta((byte *)from, (byte *)to, TRUE, (delta_t *)g_pclientdelta, NULL);
+	g_enableDeltaStringHackFix = false;
 
 	if (host_client->lw && gEntityInterface.pfnGetWeaponData(host_client->edict, frame->weapondata))
 	{

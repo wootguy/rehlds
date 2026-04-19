@@ -573,6 +573,8 @@ void MSG_WriteBitString(const char *p)
 	MSG_WriteBits(0, 8);
 }
 
+bool g_enableDeltaStringHackFix;
+
 void MSG_WriteBitString_hackfix(const char* p)
 {
 	const uint8_t* pch = (uint8_t*)p;
@@ -588,7 +590,8 @@ void MSG_WriteBitString_hackfix(const char* p)
 	// of a keyvalue pair (example: "\\hl\\1\\jmp\\0\\slj\\100"). 100 != 1 so the prediction check
 	// fails for long jumping. This separator prevents the trailing 0's merging with a key value.
 	// This will also affect any delta.lst values that use "DT_STRING". There are none for HL.
-	MSG_WriteBits('\\', 8);
+	if (g_enableDeltaStringHackFix)
+		MSG_WriteBits('\\', 8);
 
 	MSG_WriteBits(0, 8);
 }
