@@ -33,6 +33,7 @@
 extern unsigned char *gPAS;
 extern unsigned char *gPVS;
 extern int gPVSRowBytes;
+extern int g_checkvis_iter;
 
 void Mod_Init(void);
 unsigned char *Mod_DecompressVis(unsigned char *in, model_t *model);

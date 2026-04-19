@@ -221,6 +221,7 @@ cvar_t sv_precache_bspmodels = { "sv_precache_bspmodels", "1", 0, 1.0f, nullptr 
 cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
 cvar_t sv_max_client_edicts = { "sv_max_client_edicts", "1665", 0, 1.0f, nullptr };
 cvar_t sv_steam_auth = { "sv_steam_auth", "1", 0, 1.0f, nullptr };
+cvar_t sv_vis_test_limit = { "sv_vis_test_limit", "0", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -4635,6 +4636,18 @@ int EXT_FUNC SV_CheckVisibility(edict_t *entity, unsigned char *pset)
 	if (!pset)
 		return 1;
 
+	int eidx = clamp(entity - g_psv.edicts, 0, 32768);
+
+	if (entity->serialnumber && g_psv.vis_skip_ents[eidx] == entity->serialnumber) {
+		if (!sv_vis_test_limit.value) {
+			memset(g_psv.vis_skip_ents, 0, sizeof(g_psv.vis_skip_ents));
+			Con_Printf("Reset all globally visible entities\n");
+		}
+		else {
+			return 1;
+		}
+	}
+
 	if (entity->headnode < 0)
 	{
 		for (int i = 0; i < entity->num_leafs; i++)
@@ -4657,7 +4670,16 @@ int EXT_FUNC SV_CheckVisibility(edict_t *entity, unsigned char *pset)
 				return 1;
 		}
 
-		if (CM_HeadnodeVisible(&g_psv.worldmodel->nodes[entity->headnode], pset, &leaf))
+		g_checkvis_iter = 0;
+		qboolean isVisible = CM_HeadnodeVisible(&g_psv.worldmodel->nodes[entity->headnode], pset, &leaf);
+
+		if (sv_vis_test_limit.value && g_checkvis_iter > sv_vis_test_limit.value) {
+			Con_Printf("Entity '%s' (%s) model '%s' was made globally visible to improve performance (%d iter)\n",
+				STRING(entity->v.targetname), STRING(entity->v.classname), STRING(entity->v.model), g_checkvis_iter);
+			g_psv.vis_skip_ents[eidx] = entity->serialnumber;
+		}
+
+		if (isVisible)
 		{
 			entity->leafnums[entity->num_leafs] = leaf;
 			entity->num_leafs = (entity->num_leafs + 1) % 48;
@@ -8205,6 +8227,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_printcvar);
 	Cvar_RegisterVariable(&sv_max_client_edicts);
 	Cvar_RegisterVariable(&sv_steam_auth);
+	Cvar_RegisterVariable(&sv_vis_test_limit);
 	Cvar_RegisterVariable(&sv_retouch);
 #endif
 

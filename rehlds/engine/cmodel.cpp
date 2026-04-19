@@ -235,6 +235,8 @@ void CM_CalcPAS(model_t *pModel)
 	Con_DPrintf("Average leaves visible / audible / total: %i / %i / %i\n", vcount / count, acount / count, count);
 }
 
+int g_checkvis_iter;
+
 qboolean CM_HeadnodeVisible(mnode_t *node, unsigned char *visbits, int *first_visible_leafnum)
 {
 	int leafnum;
@@ -243,6 +245,8 @@ qboolean CM_HeadnodeVisible(mnode_t *node, unsigned char *visbits, int *first_vi
 	leaf = (mleaf_t *)node;
 	while (leaf && leaf->contents != CONTENTS_SOLID)
 	{
+		g_checkvis_iter++;
+
 		if (leaf->contents < 0)
 		{
 			leafnum = leaf - g_psv.worldmodel->leafs - 1;

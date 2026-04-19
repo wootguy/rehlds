@@ -125,6 +125,7 @@ typedef struct server_s
 	const char *model_precache[MAX_MODELS];
 	struct model_s *models[MAX_MODELS];
 	unsigned char model_precache_flags[MAX_MODELS];
+	int vis_skip_ents[32768];
 	struct event_s event_precache[MAX_EVENTS];
 	const char *sound_precache[MAX_SOUNDS];
 	short int sound_precache_hashedlookup[MAX_SOUNDS_HASHLOOKUP_SIZE];
