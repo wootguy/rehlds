@@ -436,11 +436,15 @@ void SV_FindTouchedLeafs(edict_t *ent, mnode_t *node, int *topnode)
 
 #else // REHLDS_OPT_PEDANTIC
 
+int g_touched_leaves_iter = 0;
+
 // unrolled some tail recursion
 void SV_FindTouchedLeafs(edict_t *ent, mnode_t *node, int *topnode)
 {
 	while (true)
 	{
+		g_touched_leaves_iter++;
+
 		// if no collision model
 		if (!node)
 			return;
@@ -494,6 +498,9 @@ void SV_FindTouchedLeafs(edict_t *ent, mnode_t *node, int *topnode)
 
 #endif // REHLDS_OPT_PEDANTIC
 
+extern cvar_t sv_debug_linkedict;
+extern int g_touched_leaves_iter;
+
 // Needs to be called any time an entity changes origin, mins, maxs, or solid
 // flags ent->v.modified
 // sets ent->v.absmin and ent->v.absmax
@@ -528,8 +535,36 @@ void SV_LinkEdict(edict_t *ent, qboolean touch_triggers)
 		ent->num_leafs = 0;
 		ent->headnode = -1;
 
+		g_touched_leaves_iter = 0;
 		if (ent->v.modelindex)
 			SV_FindTouchedLeafs(ent, g_psv.worldmodel->nodes, &topnode);
+
+		static int lastIter[32768];
+		static bool wason;
+
+		int eidx = (ent - g_psv.edicts);
+
+		if (sv_debug_linkedict.value)
+			wason = true;
+
+		if (sv_debug_linkedict.value && g_touched_leaves_iter > sv_debug_linkedict.value) {
+			if (lastIter[eidx] != g_touched_leaves_iter) {
+				Con_Printf("%d '%s' (%s) (%s) (%d %d %d) touch leaf iter %d\n",
+					eidx,
+					STRING(ent->v.targetname),
+					STRING(ent->v.classname),
+					ent->v.model ? STRING(ent->v.model) : "NO MODEL",
+					(int)ent->v.origin[0], (int)ent->v.origin[1], (int)ent->v.origin[2],
+					g_touched_leaves_iter);
+			}
+			
+			lastIter[eidx] = g_touched_leaves_iter;
+		}
+		else if (!sv_debug_linkedict.value && wason) {
+			wason = false;
+			memset(lastIter, 0, sizeof(int) * 32768);
+			Con_Printf("Reset debug touch mem\n");
+		}
 
 		if (ent->num_leafs > MAX_ENT_LEAFS)
 		{

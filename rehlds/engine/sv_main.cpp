@@ -222,6 +222,7 @@ cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
 cvar_t sv_max_client_edicts = { "sv_max_client_edicts", "1665", 0, 1.0f, nullptr };
 cvar_t sv_steam_auth = { "sv_steam_auth", "1", 0, 1.0f, nullptr };
 cvar_t sv_vis_test_limit = { "sv_vis_test_limit", "0", 0, 1.0f, nullptr };
+cvar_t sv_debug_linkedict = { "sv_debug_linkedict", "0", 0, 1.0f, nullptr };
 #endif
 
 delta_t *SV_LookupDelta(char *name)
@@ -8228,6 +8229,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_max_client_edicts);
 	Cvar_RegisterVariable(&sv_steam_auth);
 	Cvar_RegisterVariable(&sv_vis_test_limit);
+	Cvar_RegisterVariable(&sv_debug_linkedict);
 	Cvar_RegisterVariable(&sv_retouch);
 #endif
 

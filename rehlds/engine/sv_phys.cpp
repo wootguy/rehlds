@@ -935,8 +935,8 @@ void SV_Physics_None(edict_t *ent)
 	// regular thinking
 	SV_RunThink(ent);
 
-	if (sv_retouch.value) {
-		// force retouch even for stationary
+	if (sv_retouch.value && (ent->v.flags & FL_MONSTER)) {
+		// force retouch even for stationary monsters
 		SV_LinkEdict(ent, TRUE);
 	}
 }
@@ -1065,8 +1065,7 @@ void SV_Physics_Toss(edict_t *ent)
 
 		if (VectorIsZero(ent->v.basevelocity)) {
 
-			if (sv_retouch.value) {
-				// force retouch even for stationary
+			if (sv_retouch.value && (ent->v.flags & FL_MONSTER)) {
 				SV_LinkEdict(ent, TRUE);
 			}
 
@@ -1149,8 +1148,7 @@ void SV_Physics_Bounce(edict_t *ent)
 
 		if (VectorIsZero(ent->v.basevelocity)) {
 
-			if (sv_retouch.value) {
-				// force retouch even for stationary
+			if (sv_retouch.value && (ent->v.flags & FL_MONSTER)) {
 				SV_LinkEdict(ent, TRUE);
 			}
 
@@ -1484,7 +1482,7 @@ void SV_Physics_Step(edict_t *ent)
 			}
 		}
 
-		if (sv_retouch.value) {
+		if (sv_retouch.value && (ent->v.flags & FL_MONSTER)) {
 			// always run touch functions for triggers touched by stationary monsters
 			SV_LinkEdict(ent, TRUE);
 		}
