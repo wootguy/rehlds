@@ -7692,7 +7692,8 @@ qboolean IsSafeFileToDownload(const char *filename)
 		|| Q_strcmp(first, ".log") == 0
 //		|| Q_strcmp(first, ".so") == 0 // We can't get here, because of extension length check
 //		|| Q_strcmp(first, ".dylib") == 0
-		|| Q_strcmp(first, ".sys") == 0)
+		|| Q_strcmp(first, ".sys") == 0
+		|| Q_strcmp(first, ".ent") == 0)
 #else
 		|| Q_strstr(lwrfilename, ".cfg")
 		|| Q_strstr(lwrfilename, ".lst")
