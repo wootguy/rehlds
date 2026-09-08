@@ -88,7 +88,8 @@ void EXT_FUNC SetMinMaxSize(edict_t *e, const float *min, const float *max, qboo
 	for (int i = 0; i < 3; i++)
 	{
 		if (min[i] > max[i])
-			Host_Error("%s: backwards mins/maxs", __func__);
+			Host_Error("%s: backwards mins/maxs on entity '%s' (%s), model '%s'", __func__,
+				STRING(e->v.targetname), STRING(e->v.classname), STRING(e->v.model));
 	}
 
 	e->v.mins[0] = min[0];
