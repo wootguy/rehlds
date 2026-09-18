@@ -1499,6 +1499,8 @@ void SV_Physics()
 	gGlobalVariables.time = g_psv.time;
 	gEntityInterface.pfnStartFrame();
 
+	uint64_t now = getEpochMillis();
+
 	// treat each object in turn
 	for (int i = 0; i < g_psv.num_edicts; i++)
 	{
@@ -1579,6 +1581,8 @@ void SV_Physics()
 
 	if (gGlobalVariables.force_retouch != 0.0f)
 		gGlobalVariables.force_retouch = gGlobalVariables.force_retouch - 1.0f;
+
+	g_psv.perf_timings.physics = getEpochMillis() - now;
 }
 
 trace_t SV_Trace_Toss(edict_t *ent, edict_t *ignore)

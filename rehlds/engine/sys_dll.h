@@ -108,6 +108,7 @@ NOXREF void Sys_Warning(const char *pszWarning, ...);
 void Sys_Printf(const char *fmt, ...);
 void Sys_Quit(void);
 double Sys_FloatTime(void);
+uint64_t getEpochMillis();
 void Dispatch_Substate(int iSubState);
 void GameSetSubState(int iSubState);
 void GameSetState(int iState);

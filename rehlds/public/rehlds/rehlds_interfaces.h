@@ -323,4 +323,5 @@ public:
 	virtual sizebuf_t *GetMulticastBuf() = 0;
 	virtual sizebuf_t *GetSpectatorBuf() = 0;
 	virtual sizebuf_t *GetSignonBuf() = 0;
+	virtual perftimings_t *GetPerfTimings() = 0;
 };

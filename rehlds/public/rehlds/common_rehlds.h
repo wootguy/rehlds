@@ -76,3 +76,13 @@ typedef struct incomingtransfer_s
 	float fLastStatusUpdate;
 	qboolean custom;
 } incomingtransfer_t;
+
+typedef struct perftimings_s
+{
+	uint32_t frame;					// overall frame time, including idle time for ticrate
+	uint32_t frameInt;				// internal frame time
+	uint32_t readPackets;			// millis spent reading packets and running player thinks/moves
+	uint32_t sendClientMessages;	// millis spent transmitting messages and in AddToFullPack
+	uint32_t addToFullPack;			// millis spent in AddToFullPack
+	uint32_t physics;				// subtract individual Think times to get overall physics millis
+} perftimings_t;

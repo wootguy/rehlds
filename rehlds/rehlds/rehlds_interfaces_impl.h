@@ -328,6 +328,7 @@ public:
 	virtual sizebuf_t *GetMulticastBuf();
 	virtual sizebuf_t *GetSpectatorBuf();
 	virtual sizebuf_t *GetSignonBuf();
+	virtual perftimings_t* GetPerfTimings();
 };
 
 extern CGameClient** g_GameClients;

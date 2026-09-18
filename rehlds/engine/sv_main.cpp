@@ -4751,6 +4751,7 @@ void SV_WriteEntitiesToClient(client_t *client, sizebuf_t *msg)
 	qboolean sendping = SV_ShouldUpdatePing(client);
 	int flags = client->lw != 0;
 
+	uint64_t addPackStart = getEpochMillis();
 	int e;
 	for (e = 1; e <= g_psvs.maxclients; e++)
 	{
@@ -4787,6 +4788,7 @@ void SV_WriteEntitiesToClient(client_t *client, sizebuf_t *msg)
 			++curPack->num_entities;
 #endif //REHLDS_OPT_PEDANTIC
 	}
+	g_psv.perf_timings.addToFullPack = getEpochMillis() - addPackStart;
 
 #ifdef REHLDS_FIXES
 	int attachedEntCount[MAX_CLIENTS + 1] = {};
@@ -7977,10 +7979,17 @@ void EXT_FUNC SV_Frame_Internal()
 	if (!g_psv.active)
 		return;
 
+	static uint64_t frameStart;
+	uint64_t frameIntStart = getEpochMillis();
+
 	gGlobalVariables.frametime = host_frametime;
 	g_psv.oldtime = g_psv.time;
 	SV_CheckCmdTimes();
+
+	uint64_t readStart = getEpochMillis();
 	SV_ReadPackets();
+	uint64_t readEnd = getEpochMillis();
+
 	if (SV_IsSimulating())
 	{
 		SV_Physics();
@@ -7989,10 +7998,21 @@ void EXT_FUNC SV_Frame_Internal()
 	SV_QueryMovevarsChanged();
 	SV_RequestMissingResourcesFromClients();
 	SV_CheckTimeouts();
+
+	uint64_t sendStart = getEpochMillis();
 	SV_SendClientMessages();
+	uint64_t sendEnd = getEpochMillis();
+	
 	SV_CheckMapDifferences();
 	SV_GatherStatistics();
 	Steam_RunFrame();
+
+	uint64_t endFrame = getEpochMillis();
+	g_psv.perf_timings.readPackets = readEnd - readStart;
+	g_psv.perf_timings.sendClientMessages = sendEnd - sendStart;
+	g_psv.perf_timings.frame = endFrame - frameStart;
+	g_psv.perf_timings.frameInt = endFrame - frameIntStart;
+	frameStart = endFrame;
 }
 
 void SV_Drop_f(void)

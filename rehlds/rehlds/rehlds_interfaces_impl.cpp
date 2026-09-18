@@ -856,6 +856,11 @@ sizebuf_t *EXT_FUNC CRehldsServerData::GetSignonBuf()
 	return &g_psv.signon;
 }
 
+perftimings_t* EXT_FUNC CRehldsServerData::GetPerfTimings()
+{
+	return &g_psv.perf_timings;
+}
+
 void Rehlds_Interfaces_FreeClients()
 {
 	if (g_GameClients == NULL)

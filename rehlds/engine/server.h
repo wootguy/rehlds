@@ -150,6 +150,7 @@ typedef struct server_s
 	unsigned char spectator_buf[1024];
 	sizebuf_t signon;
 	unsigned char signon_data[32768];
+	perftimings_t perf_timings;
 } server_t;
 
 

@@ -614,6 +614,14 @@ double Sys_FloatTime(void)
 
 #endif //_WIN32
 
+#include <chrono>
+
+uint64_t getEpochMillis() {
+	return std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::system_clock::now().time_since_epoch()
+	).count();
+}
+
 void Dispatch_Substate(int iSubState)
 {
 	giSubState = iSubState;
