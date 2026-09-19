@@ -2465,8 +2465,10 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 		int len = net_message.cursize - msg_readcount;
 		if (net_message.cursize - msg_readcount <= 0 || len >= sizeof(szSteamAuthBuf))
 		{
-			SV_RejectConnection(&adr, "STEAM certificate length error! %i/%i\n", net_message.cursize - msg_readcount, sizeof(szSteamAuthBuf));
-			return;
+			if (sv_steam_auth.value != 0) {
+				SV_RejectConnection(&adr, "STEAM certificate length error! %i/%i\n", net_message.cursize - msg_readcount, sizeof(szSteamAuthBuf));
+				return;
+			}
 		}
 		Q_memcpy(szSteamAuthBuf, &net_message.data[msg_readcount], len);
 		client->network_userid.clientip = *(uint32 *)&adr.ip[0];
