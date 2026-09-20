@@ -861,6 +861,14 @@ perftimings_t* EXT_FUNC CRehldsServerData::GetPerfTimings()
 	return &g_psv.perf_timings;
 }
 
+void EXT_FUNC CRehldsServerData::ShutDown()
+{
+	Steam_Shutdown();
+	Log_Printf("Server shutdown\n");
+	Log_Close();
+	exit(0);
+}
+
 void Rehlds_Interfaces_FreeClients()
 {
 	if (g_GameClients == NULL)

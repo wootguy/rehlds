@@ -329,6 +329,7 @@ public:
 	virtual sizebuf_t *GetSpectatorBuf();
 	virtual sizebuf_t *GetSignonBuf();
 	virtual perftimings_t* GetPerfTimings();
+	virtual void ShutDown();
 };
 
 extern CGameClient** g_GameClients;
