@@ -30,13 +30,24 @@
 class INetChan;
 class IGameClient;
 
+#include "netadr.h"
+#include "userid_rehlds.h"
+
+#ifdef REHLDS_LEAN_AND_MEAN
+typedef FILE* FileHandle_t;
+typedef struct resource_s resource_t;
+typedef struct customization_s customization_t;
+typedef struct sizebuf_s sizebuf_t;
+typedef struct perftimings_s perftimings_t;
+enum server_state_e : int;
+typedef enum server_state_e server_state_t;
+#else
 #include "archtypes.h"
 #include "const.h"
-#include "netadr.h"
 
 #include "common_rehlds.h"
-#include "userid_rehlds.h"
 #include "FileSystem.h"
+#endif
 
 #ifdef REHLDS_SELF
 #include "server.h"

@@ -26,16 +26,31 @@
 *
 */
 #pragma once
-#include "archtypes.h"
-#include "cmd_rehlds.h"
 #include "rehlds_interfaces.h"
 #include "hookchains.h"
+
+#ifdef REHLDS_LEAN_AND_MEAN
+#include <stdint.h>
+typedef struct model_s model_t;
+using cvar_callback_t = void (*)(const char* pszNewValue);
+typedef void(*ENTITYINIT)(struct entvars_s*);
+enum cmd_source_s : int;
+typedef enum cmd_source_s cmd_source_t;
+enum sv_delta_s : int;
+typedef enum sv_delta_s sv_delta_t;
+class ObjectList;
+class IMessageManager;
+class IRehldsFlightRecorder;
+#else
+#include "archtypes.h"
+#include "cmd_rehlds.h"
 #include "FlightRecorder.h"
 #include "IMessageManager.h"
 #include "interface.h"
 #include "model.h"
 #include "ObjectList.h"
 #include "pr_dlls.h"
+#endif
 
 #define REHLDS_API_VERSION_MAJOR 3
 #define REHLDS_API_VERSION_MINOR 15
