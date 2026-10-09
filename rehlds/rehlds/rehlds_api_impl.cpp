@@ -458,6 +458,41 @@ void EXT_FUNC RemoveCvarListener_api(const char *var_name, cvar_callback_t func)
 	}
 }
 
+void EXT_FUNC SV_SetMoveVars_api()
+{
+	SV_SetMoveVars(&sv_movevars);
+}
+
+void EXT_FUNC SV_WriteMovevarsToClient_api(sizebuf_t *message)
+{
+	SV_WriteMovevarsToClient(message, &sv_movevars);
+}
+
+void EXT_FUNC SetServerPause(bool setPause)
+{
+	g_psv.paused = setPause;
+#ifdef REHLDS_FIXES
+	for (int i = 0; i < g_psvs.maxclients; i++)
+	{
+		if (g_psvs.clients[i].fakeclient)
+			continue;
+		if (!g_psvs.clients[i].connected)
+			continue;
+
+		MSG_WriteByte(&g_psvs.clients[i].netchan.message, svc_setpause);
+		MSG_WriteByte(&g_psvs.clients[i].netchan.message, g_psv.paused);
+	}
+#else // REHLDS_FIXES
+	MSG_WriteByte(&g_psv.reliable_datagram, svc_setpause);
+	MSG_WriteByte(&g_psv.reliable_datagram, g_psv.paused);
+#endif // REHLDS_FIXES
+}
+
+void SV_SendUserReg_api(sizebuf_t *msg)
+{
+	SV_SendUserReg(msg, sv_gpNewUserMsgs);
+}
+
 CRehldsServerStatic g_RehldsServerStatic;
 CRehldsServerData g_RehldsServerData;
 CRehldsHookchains g_RehldsHookchains;
@@ -473,10 +508,10 @@ RehldsFuncs_t g_RehldsApiFuncs =
 	&NET_SendPacket_api,
 	&Cmd_TokenizeString,
 	&SV_CheckChallenge_api,
-	&SV_SendUserReg,
+	&SV_SendUserReg_api,
 	&SV_WriteDeltaDescriptionsToClient,
-	&SV_SetMoveVars,
-	&SV_WriteMovevarsToClient,
+	&SV_SetMoveVars_api,
+	&SV_WriteMovevarsToClient_api,
 	&GetClientFallback_api,
 	&GetAllowCheats_api,
 	&GSBSecure_api,
@@ -561,7 +596,8 @@ RehldsFuncs_t g_RehldsApiFuncs =
 	&SZ_Clear_api,
 	&MSG_BeginReading_api,
 	&GetHostFrameTime_api,
-	&GetFirstCmdFunctionHandle_api
+	&GetFirstCmdFunctionHandle_api,
+	&SetServerPause,
 };
 
 bool EXT_FUNC SV_EmitSound2_internal(edict_t *entity, IGameClient *pReceiver, int channel, const char *sample, float volume, float attenuation, int flags, int pitch, int emitFlags, const float *pOrigin)
@@ -569,7 +605,7 @@ bool EXT_FUNC SV_EmitSound2_internal(edict_t *entity, IGameClient *pReceiver, in
 	bool bSendPAS = (channel != CHAN_STATIC && !(flags & SND_FL_STOP) && !(emitFlags & SND_EMIT2_NOPAS));
 	vec3_t origin = {0, 0, 0};
 
-	if (entity && entity != g_psv.edicts)
+	if ((!pOrigin || !(emitFlags & SND_EMIT2_USE_ORIGIN)) && entity && entity != g_psv.edicts)
 	{
 		for (int i = 0; i < 3; ++i)
 			origin[i] = (entity->v.maxs[i] + entity->v.mins[i]) * 0.5f + entity->v.origin[i];
@@ -885,6 +921,10 @@ IRehldsHookRegistry_SV_AllowPhysent* CRehldsHookchains::SV_AllowPhysent() {
 	return &m_SV_AllowPhysent;
 }
 
+IRehldsHookRegistry_SV_SendResources* CRehldsHookchains::SV_SendResources() {
+	return &m_SV_SendResources;
+}
+
 IRehldsHookRegistry_ShouldSendResource* CRehldsHookchains::ShouldSendResource() {
 	return &m_ShouldSendResource;
 }
@@ -917,8 +957,13 @@ IRehldsServerData* EXT_FUNC CRehldsApi::GetServerData() {
 	return &g_RehldsServerData;
 }
 
+IMessageManager* EXT_FUNC CRehldsApi::GetMessageManager() {
+	return &MessageManager();
+}
+
 IRehldsFlightRecorder* EXT_FUNC CRehldsApi::GetFlightRecorder() {
 	return g_FlightRecorder;
 }
 
 EXPOSE_SINGLE_INTERFACE(CRehldsApi, IRehldsApi, VREHLDS_HLDS_API_VERSION);
+

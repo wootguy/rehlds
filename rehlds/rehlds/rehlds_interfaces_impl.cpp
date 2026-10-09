@@ -34,6 +34,7 @@ CGameClient::CGameClient(int id, client_t* cl)
 	: m_NetChan(&cl->netchan)
 #ifdef REHLDS_FIXES
 	, m_localGameTimeBase(0)
+	, m_reconnectDeadline(0)
 #endif
 {
 	m_Id = id;
@@ -530,6 +531,15 @@ netchan_t* EXT_FUNC CNetChan::GetChan()
 	return m_pNetChan;
 }
 
+void CNetChan::Clear()
+{
+	for (int i = 0; i < MAX_STREAMS; i++)
+	{
+		for (int j = 0; j < NET_DECOMPRESS_MAX_TIMES; j++)
+			m_FragStats[i].decompress_failure_times[j] = 0;
+		m_FragStats[i].num_decompress_failures = 0;
+	}
+}
 
 
 int EXT_FUNC CRehldsServerStatic::GetMaxClients()

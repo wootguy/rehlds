@@ -587,6 +587,24 @@ qboolean Info_SetValueForStarKey(char *s, const char *key, const char *value, si
 		return FALSE;
 	}
 
+	for (const char *p = key; *p; p++)
+	{
+		if ((unsigned char)*p < 0x20 || (unsigned char)*p == 0x7f)
+		{
+			Con_Printf("Can't use keys with ASCII control characters\n");
+			return FALSE;
+		}
+	}
+
+	for (const char *p = value; *p; p++)
+	{
+		if ((unsigned char)*p < 0x20 || (unsigned char)*p == 0x7f)
+		{
+			Con_Printf("Can't use values with ASCII control characters\n");
+			return FALSE;
+		}
+	}
+
 	int keyLen = Q_strlen(key);
 	int valueLen = Q_strlen(value);
 
@@ -856,6 +874,12 @@ qboolean Info_IsValid(const char *s)
 		return false;
 	};
 
+	// invalid utf8 chars are deprecated
+	if (!Q_UnicodeValidate(s))
+	{
+		return FALSE;
+	}
+
 	while (*s == '\\')
 	{
 		const char* key = ++s;
@@ -873,6 +897,10 @@ qboolean Info_IsValid(const char *s)
 
 			// ".." deprecated. don't know why. model path?
 			if (*s == '.' && *(s + 1) == '.')
+				return FALSE;
+
+			// control characters are prohibited
+			if ((unsigned char)*s < 0x20 || (unsigned char)*s == 0x7f)
 				return FALSE;
 
 			s++;
@@ -896,6 +924,10 @@ qboolean Info_IsValid(const char *s)
 
 			// ".." deprecated
 			if (*s == '.' && *(s + 1) == '.')
+				return FALSE;
+
+			// control characters are prohibited
+			if ((unsigned char)*s < 0x20 || (unsigned char)*s == 0x7f)
 				return FALSE;
 
 			s++;

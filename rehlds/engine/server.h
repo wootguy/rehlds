@@ -53,6 +53,7 @@ const int MAX_NAME   = 32;
 #include "pm_defs.h"
 #include "inst_baseline.h"
 #include "net_ws.h"
+#include "pm_shared/pm_movevars.h"
 
 const int DEFAULT_SOUND_PACKET_VOLUME			= 255;
 const float DEFAULT_SOUND_PACKET_ATTENUATION	= 1.0f;
@@ -94,13 +95,6 @@ typedef enum redirect_e
 	RD_CLIENT = 1,
 	RD_PACKET = 2,
 } redirect_t;
-
-typedef enum server_state_e
-{
-	ss_dead = 0,
-	ss_loading = 1,
-	ss_active = 2,
-} server_state_t;
 
 typedef struct server_s
 {
@@ -244,6 +238,7 @@ typedef struct client_s
 	double m_lastvoicetime;
 	int m_sendrescount;
 	qboolean m_bSentNewResponse;
+	movevars_t movevars;
 } client_t;
 
 enum
@@ -368,6 +363,7 @@ extern cvar_t sv_visiblemaxplayers;
 extern cvar_t sv_downloadurl;
 extern cvar_t sv_allow_dlfile;
 extern cvar_t sv_version;
+extern cvar_t sv_tags;
 #ifdef REHLDS_FIXES
 extern cvar_t sv_echo_unknown_cmd;
 extern cvar_t sv_auto_precache_sounds_in_models;
@@ -380,6 +376,7 @@ extern cvar_t sv_rehlds_attachedentities_playeranimationspeed_fix;
 extern cvar_t sv_rehlds_local_gametime;
 extern cvar_t sv_rehlds_send_mapcycle;
 extern cvar_t sv_usercmd_custom_random_seed;
+extern cvar_t sv_rehlds_allow_large_sprays;
 extern cvar_t sv_printcvar;
 #endif
 extern int sv_playermodel;
@@ -463,16 +460,16 @@ void SV_BuildHashedSoundLookupTable(void);
 void SV_AddSampleToHashedLookupTable(const char *pszSample, int iSampleIndex);
 qboolean SV_ValidClientMulticast(client_t *client, int soundLeaf, int to);
 void SV_Multicast(edict_t *ent, vec_t *origin, int to, qboolean reliable);
-void SV_WriteMovevarsToClient(sizebuf_t *message);
+void SV_WriteMovevarsToClient(sizebuf_t *message, struct movevars_s *movevars);
 void SV_WriteDeltaDescriptionsToClient(sizebuf_t *msg);
-void SV_SetMoveVars(void);
-void SV_QueryMovevarsChanged(void);
+void SV_SetMoveVars(struct movevars_s *movevars);
 void SV_SendServerinfo(sizebuf_t *msg, client_t *client);
 void SV_SendServerinfo_internal(sizebuf_t *msg, client_t *client);
 void SV_SendResources(sizebuf_t *msg);
+void SV_SendResources_internal(sizebuf_t *msg);
 void SV_WriteClientdataToMessage(client_t *client, sizebuf_t *msg);
 void SV_WriteSpawn(sizebuf_t *msg);
-void SV_SendUserReg(sizebuf_t *msg);
+void SV_SendUserReg(sizebuf_t *msg, UserMsg *pUserMsgs);
 void SV_New_f(void);
 void SV_SendRes_f(void);
 void SV_Spawn_f(void);
@@ -570,6 +567,9 @@ int SV_ModelIndex(const char *name);
 void SV_AddResource(resourcetype_t type, const char *name, int size, unsigned char flags, int index);
 void SV_AddResource_internal(resourcetype_t type, const char *name, int size, unsigned char flags, int index);
 size_t SV_CountResourceByType(resourcetype_t type, resource_t **pResourceList = nullptr, size_t nListMax = 0, size_t *nWidthFileNameMax = nullptr);
+#ifdef REHLDS_FIXES
+char *SV_TrimResourceLine(char *line);
+#endif
 void SV_CreateGenericResources(void);
 void SV_CreateResourceList(void);
 void SV_ClearCaches(void);
@@ -581,15 +581,19 @@ void SV_BroadcastCommand(char *fmt, ...);
 void SV_BuildReconnect(sizebuf_t *msg);
 NOXREF void SV_ReconnectAllClients(void);
 void SetCStrikeFlags(void);
+void SV_LinkUserMessages();
 void SV_ActivateServer(int runPhysics);
 void SV_ActivateServer_internal(int runPhysics);
 void SV_ServerShutdown(void);
 int SV_SpawnServer(qboolean bIsDemo, char *server, char *startspot);
 void SV_LoadEntities(void);
 void SV_ClearEntities(void);
-int RegUserMsg(const char *pszName, int iSize);
+int SV_RegUserMsg(const char *pszName, int iSize);
 qboolean StringToFilter(const char *s, ipfilter_t *f);
 USERID_t *SV_StringToUserID(const char *str);
+bool CanBeWrittenWithoutCIDR(const ipfilter_t &f);
+void FilterToString(const ipfilter_t &f, char *s);
+bool IsFilterIncludesAnotherFilter(const ipfilter_t &f, const ipfilter_t &f2);
 void SV_BanId_f(void);
 void Host_Kick_f(void);
 void SV_RemoveId_f(void);
@@ -604,6 +608,9 @@ void SV_InactivateClients(void);
 void SV_FailDownload(const char *filename);
 const char *Q_stristr(const char *pStr, const char *pSearch);
 qboolean IsSafeFileToDownload(const char *filename);
+#ifdef REHLDS_FIXES
+const char *SV_GetRequestedDownloadName(char *out, size_t outSize);
+#endif
 void SV_BeginFileDownload_f(void);
 void SV_SetMaxclients(void);
 void SV_HandleRconPacket(void);

@@ -694,35 +694,33 @@ qboolean SV_PlayerRunThink(edict_t *ent, float frametime, double clienttimebase)
 	return ent->free == 0;
 }
 
-void SV_CheckMovingGround(edict_t *player, float frametime)
+void SV_CheckMovingGround(edict_t *ent, float frametime)
 {
 	edict_t *groundentity;
 
-	if (player->v.flags & FL_ONGROUND)
+	if (ent->v.flags & FL_ONGROUND)
 	{
-		groundentity = player->v.groundentity;
+		groundentity = ent->v.groundentity;
 		if (groundentity)
 		{
 			if (groundentity->v.flags & FL_CONVEYOR)
 			{
-				if (player->v.flags & FL_BASEVELOCITY)
-					VectorMA(player->v.basevelocity, groundentity->v.speed, groundentity->v.movedir, player->v.basevelocity);
+				if (ent->v.flags & FL_BASEVELOCITY)
+					VectorMA(ent->v.basevelocity, groundentity->v.speed, groundentity->v.movedir, ent->v.basevelocity);
 				else
-					VectorScale(groundentity->v.movedir, groundentity->v.speed, player->v.basevelocity);
-				player->v.flags |= FL_BASEVELOCITY;
+					VectorScale(groundentity->v.movedir, groundentity->v.speed, ent->v.basevelocity);
+				ent->v.flags |= FL_BASEVELOCITY;
 			}
 		}
 	}
 
-	if (!(player->v.flags & FL_BASEVELOCITY))
+	if (!(ent->v.flags & FL_BASEVELOCITY))
 	{
-		VectorMA(player->v.velocity, frametime * 0.5f + 1.0f, player->v.basevelocity, player->v.velocity);
-		player->v.basevelocity[0] = 0;
-		player->v.basevelocity[1] = 0;
-		player->v.basevelocity[2] = 0;
+		VectorMA(ent->v.velocity, frametime * 0.5f + 1.0f, ent->v.basevelocity, ent->v.velocity);
+		VectorClear(ent->v.basevelocity);
 	}
 
-	player->v.flags &= ~FL_BASEVELOCITY;
+	ent->v.flags &= ~FL_BASEVELOCITY;
 }
 
 void SV_ConvertPMTrace(trace_t *dest, pmtrace_t *src, edict_t *ent)
@@ -766,13 +764,31 @@ void SV_ForceFullClientsUpdate(void)
 	Netchan_FragSend(&host_client->netchan);
 }
 
-void SV_RunCmd(usercmd_t *ucmd, int random_seed)
+double TimeDifference(uint64_t start, uint64_t end)
+{
+	if (end > start)
+	{
+		return (end - start) / 1000.0;
+	}
+	else
+	{
+		return ((start - end) / 1000.0) * -1.0;
+	}
+}
+
+void SV_RunCmd(usercmd_t* ucmd, int random_seed, qboolean fNetCmd, qboolean fChopped)
 {
 	usercmd_t cmd = *ucmd;
 	int i;
 	edict_t *ent;
 	trace_t trace;
 	float frametime;
+
+#ifdef REHLDS_FIXES
+	// client could disconnect during CheckLimits or game-DLL callbacks
+	if (!host_client->connected)
+		return;
+#endif // REHLDS_FIXES
 
 	if (host_client->ignorecmdtime > realtime)
 	{
@@ -782,16 +798,26 @@ void SV_RunCmd(usercmd_t *ucmd, int random_seed)
 
 
 	host_client->ignorecmdtime = 0;
+
+#ifdef REHLDS_FIXES
+	if (fNetCmd			// analyze network packets only
+		&& !fChopped
+		&& !host_client->fakeclient)
+	{
+		if (g_UserCmdTimeLimiter.CheckLimits(host_client - g_psvs.clients, ucmd))
+			return;
+	}
+#endif // REHLDS_FIXES
+
 	if (cmd.msec > 50)
 	{
 		cmd.msec = (byte)(ucmd->msec / 2.0);
-		SV_RunCmd(&cmd, random_seed);
+		SV_RunCmd(&cmd, random_seed, fNetCmd, TRUE);
 		cmd.msec = (byte)(ucmd->msec / 2.0);
 		cmd.impulse = 0;
-		SV_RunCmd(&cmd, random_seed);
+		SV_RunCmd(&cmd, random_seed, fNetCmd, TRUE);
 		return;
 	}
-
 
 	if (!host_client->fakeclient)
 		SV_SetupMove(host_client);
@@ -892,7 +918,11 @@ void SV_RunCmd(usercmd_t *ucmd, int random_seed)
 	pmove->spectator = 0;
 	pmove->waterjumptime = sv_player->v.teleport_time;
 
+#ifdef REHLDS_FIXES
+	Q_memcpy(&pmove->cmd, ucmd, sizeof(pmove->cmd));
+#else
 	Q_memcpy(&pmove->cmd, &cmd, sizeof(pmove->cmd));
+#endif
 
 	pmove->dead = sv_player->v.health <= 0.0;
 	pmove->movetype = sv_player->v.movetype;
@@ -935,8 +965,16 @@ void SV_RunCmd(usercmd_t *ucmd, int random_seed)
 	pmove->PM_PlaySound = PM_SV_PlaySound;
 	pmove->PM_TraceTexture = PM_SV_TraceTexture;
 	pmove->PM_PlaybackEventFull = PM_SV_PlaybackEventFull;
+	pmove->movevars = &host_client->movevars;
+
+	const movevars_t movevars = *pmove->movevars; // preserve current movevars
+	host_client->movevars = sv_movevars; // always use global movevars as a base
 
 	gEntityInterface.pfnPM_Move(pmove, TRUE);
+
+	// Determine whether movevars has changed or not
+	if (!host_client->fakeclient && Q_memcmp(&movevars, pmove->movevars, sizeof(movevars)) != 0)
+		SV_WriteMovevarsToClient(&host_client->netchan.message, pmove->movevars); // sync movevars for the client
 
 	sv_player->v.deadflag = pmove->deadflag;
 	sv_player->v.effects = pmove->effects;
@@ -1688,13 +1726,13 @@ void SV_ParseMove(client_t *pSenderClient)
 	{
 		while (net_drop > numbackup)
 		{
-			SV_RunCmd(&host_client->lastcmd, 0);
+			SV_RunCmd(&host_client->lastcmd, 0, FALSE);
 			net_drop--;
 		}
 
 		while (net_drop > 0)
 		{
-			SV_RunCmd(&cmds[numcmds + net_drop - 1], host_client->netchan.incoming_sequence - (numcmds + net_drop - 1));
+			SV_RunCmd(&cmds[numcmds + net_drop - 1], host_client->netchan.incoming_sequence - (numcmds + net_drop - 1), TRUE);
 			net_drop--;
 		}
 
@@ -1702,10 +1740,14 @@ void SV_ParseMove(client_t *pSenderClient)
 
 	for (int i = numcmds - 1; i >= 0; i--)
 	{
-		SV_RunCmd(&cmds[i], host_client->netchan.incoming_sequence - i);
+		SV_RunCmd(&cmds[i], host_client->netchan.incoming_sequence - i, TRUE);
 	}
 
 #ifdef REHLDS_FIXES
+	// skip if client dropped while executing commands
+	if (!host_client->connected)
+		return;
+
 	if (numcmds)
 		host_client->lastcmd = cmds[numcmds - 1];
 	else if (numbackup)

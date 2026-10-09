@@ -138,7 +138,7 @@ enginefuncs_t g_engfuncsExportedToDlls = {
 	GetVarsOfEnt, PEntityOfEntOffset,
 	EntOffsetOfPEntity, IndexOfEdict,
 	PEntityOfEntIndex, FindEntityByVars,
-	GetModelPtr, RegUserMsg,
+	GetModelPtr, SV_RegUserMsg,
 	AnimationAutomove, GetBonePosition,
 	FunctionFromName, NameForFunction,
 	ClientPrintf, ServerPrint,
@@ -706,9 +706,9 @@ const char *FindAddressInTable(extensiondll_t *pDll, uint32 function)
 #ifdef _WIN32
 	for (int i = 0; i < pDll->functionCount; i++)
 	{
-		if (pDll[i].functionTable->pFunction == function)
+		if (pDll->functionTable[i].pFunction == function)
 		{
-			return pDll[i].functionTable->pFunctionName;
+			return pDll->functionTable[i].pFunctionName;
 		}
 	}
 #else // _WIN32
@@ -729,7 +729,7 @@ uint32 FindNameInTable(extensiondll_t *pDll, const char *pName)
 	{
 		if (!Q_strcmp(pName, pDll->functionTable[i].pFunctionName))
 		{
-			return pDll[i].functionTable->pFunction;
+			return pDll->functionTable[i].pFunction;
 		}
 	}
 	return NULL;
@@ -1091,6 +1091,10 @@ void LoadThisDll(const char *szDllFilename)
 		goto IgnoreThisDLL;
 	}
 
+#ifdef REHLDS_API
+	MessageManager().Init();
+#endif
+
 	pfnGiveFnptrsToDll(&g_engfuncsExportedToDlls, &gGlobalVariables);
 	if (g_iextdllMac == MAX_EXTENSION_DLL)
 	{
@@ -1444,3 +1448,4 @@ void EXT_FUNC Con_DPrintf(const char *fmt, ...)
 }
 
 #endif // defined(REHLDS_FIXES) and defined(REHLDS_FLIGHT_REC)
+

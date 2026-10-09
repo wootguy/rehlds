@@ -36,6 +36,15 @@ cvar_t net_showpackets = { "net_showpackets", "0", 0, 0.0f, nullptr};
 cvar_t net_showdrop = { "net_showdrop", "0", 0, 0.0f, nullptr};
 cvar_t net_drawslider = { "net_drawslider", "0", 0, 0.0f, nullptr};
 cvar_t net_chokeloopback = { "net_chokeloop", "0", 0, 0.0f, nullptr};
+
+cvar_t sv_net_incoming_decompression = { "sv_net_incoming_decompression", "1", 0, 1.0f, nullptr };
+cvar_t sv_net_incoming_decompression_max_ratio = { "sv_net_incoming_decompression_max_ratio", "80.0", 0, 80.0f, nullptr };
+cvar_t sv_net_incoming_decompression_max_size = { "sv_net_incoming_decompression_max_size", "65536", 0, 65536.0f, nullptr };
+cvar_t sv_net_incoming_decompression_min_failures = { "sv_net_incoming_decompression_min_failures", "4", 0, 4.0f, nullptr };
+cvar_t sv_net_incoming_decompression_max_failures = { "sv_net_incoming_decompression_max_failures", "10", 0, 10.0f, nullptr };
+cvar_t sv_net_incoming_decompression_min_failuretime = { "sv_net_incoming_decompression_min_failuretime", "0.1", 0, 0.1f, nullptr };
+cvar_t sv_net_incoming_decompression_punish = { "sv_net_incoming_decompression_punish", "-1", 0, -1.0f, nullptr };
+
 cvar_t sv_filetransfercompression = { "sv_filetransfercompression", "1", 0, 0.0f, nullptr};
 cvar_t sv_filetransfermaxsize = { "sv_filetransfermaxsize", "10485760", 0, 0.0f, nullptr};
 
@@ -178,6 +187,7 @@ void Netchan_Clear(netchan_t *chan)
 void Netchan_Setup(netsrc_t socketnumber, netchan_t *chan, netadr_t adr, int player_slot, void *connection_status, qboolean(*pfnNetchan_Blocksize)(void *))
 {
 	Netchan_Clear(chan);
+	g_GameClients[player_slot]->NetchanClear();
 
 	Q_memset(chan, 0, sizeof(netchan_t));
 
@@ -925,6 +935,28 @@ void Netchan_FragSend(netchan_t *chan)
 	}
 }
 
+qboolean Netchan_IsFileTransferActive(netchan_t *chan, const char *filename)
+{
+	fragbufwaiting_t *wait;
+
+	// The head of the file stream is the file currently being sent,
+	// every fragment of it carries the file name.
+	if (chan->fragbufs[FRAG_FILE_STREAM] && !Q_stricmp(chan->fragbufs[FRAG_FILE_STREAM]->filename, filename))
+	{
+		return TRUE;
+	}
+
+	for (wait = chan->waitlist[FRAG_FILE_STREAM]; wait; wait = wait->next)
+	{
+		if (wait->fragbufs && !Q_stricmp(wait->fragbufs->filename, filename))
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 void Netchan_AddBufferToList(fragbuf_t **pplist, fragbuf_t *pbuf)
 {
 	// Find best slot
@@ -1087,7 +1119,7 @@ void Netchan_CreateFragments(qboolean server, netchan_t *chan, sizebuf_t *msg)
 	Netchan_CreateFragments_(server, chan, msg);
 }
 
-void Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, const char *filename, unsigned char *uncompressed_pbuf, int uncompressed_size)
+int Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, const char *filename, unsigned char *uncompressed_pbuf, int uncompressed_size)
 {
 	int chunksize;
 	int send;
@@ -1103,7 +1135,16 @@ void Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, con
 	fragbufwaiting_t *wait;
 
 	if (!uncompressed_size)
-		return;
+		return FALSE;
+
+	// DoS hardening: ignore a duplicate request for a customization that is
+	// already being transferred or queued before doing any compression work
+	// (issue #1200).
+	if (server)
+	{
+		if (Netchan_IsFileTransferActive(chan, filename))
+			return TRUE;
+	}
 
 	bufferid = 1;
 	firstfragment = TRUE;
@@ -1147,7 +1188,7 @@ void Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, con
 				Mem_Free(pbuf);
 			}
 #endif
-			return;
+			return FALSE;
 		}
 
 		buf->bufferid = bufferid++;
@@ -1168,6 +1209,8 @@ void Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, con
 		buf->isfile = TRUE;
 		buf->size = send;
 		buf->foffset = pos;
+		Q_strncpy(buf->filename, filename, MAX_PATH - 1);
+		buf->filename[MAX_PATH - 1] = 0;
 
 		MSG_WriteBuf(&buf->frag_message, send, &pbuf[pos]);
 		pos += send;
@@ -1193,6 +1236,8 @@ void Netchan_CreateFileFragmentsFromBuffer(qboolean server, netchan_t *chan, con
 		Mem_Free(pbuf);
 	}
 #endif
+
+	return TRUE;
 }
 
 int Netchan_CreateFileFragments(qboolean server, netchan_t *chan, const char *filename)
@@ -1201,9 +1246,18 @@ int Netchan_CreateFileFragments(qboolean server, netchan_t *chan, const char *fi
 	if (!server)
 		return Netchan_CreateFileFragments_(server, chan, filename);
 
+	// DoS hardening: ignore a duplicate request for a file that is already
+	// being transferred or queued before touching the filesystem, so a client
+	// cannot flood dlfile requests and force the server to stat and pack the
+	// file over and over (issue #1200).
+	if (Netchan_IsFileTransferActive(chan, filename))
+		return TRUE;
+
 	if (!FS_FileExists(filename))
 		return FALSE;
-	if (FS_FileSize(filename) > sv_filetransfermaxsize.value)
+
+	unsigned int nSize = FS_FileSize(filename);
+	if (nSize == 0 || nSize > sv_filetransfermaxsize.value)
 		return FALSE;
 
 	auto wait = (fragbufwaiting_t *)Mem_ZeroMalloc(sizeof(fragbufwaiting_t));
@@ -1236,6 +1290,17 @@ int Netchan_CreateFileFragments(qboolean server, netchan_t *chan, const char *fi
 int Netchan_CreateFileFragments_(qboolean server, netchan_t *chan, const char *filename)
 #endif // REHLDS_FIXES
 {
+#ifndef REHLDS_FIXES
+	// Without REHLDS_FIXES this body is the public Netchan_CreateFileFragments
+	// itself, so guard the client-spammable entry here as well. Must not run
+	// under REHLDS_FIXES: there this body is Netchan_CreateFileFragments_,
+	// re-entered from Netchan_FragSend for stubs that were already accepted.
+	if (server)
+	{
+		if (Netchan_IsFileTransferActive(chan, filename))
+			return TRUE;
+	}
+#endif // REHLDS_FIXES
 	int chunksize;
 	int compressedFileTime;
 	FileHandle_t hfile;
@@ -1415,6 +1480,93 @@ void Netchan_FlushIncoming(netchan_t *chan, int stream)
 	chan->incomingready[stream] = FALSE;
 }
 
+void Netchan_DecompressionCvarsBounds()
+{
+	if (sv_net_incoming_decompression_min_failures.value < 1)
+		Cvar_SetValue("sv_net_incoming_decompression_min_failures", 1);
+
+	else if (sv_net_incoming_decompression_min_failures.value > NET_DECOMPRESS_MAX_TIMES)
+		Cvar_SetValue("sv_net_incoming_decompression_min_failures", NET_DECOMPRESS_MAX_TIMES);
+
+	if (sv_net_incoming_decompression_max_failures.value < 1)
+		Cvar_SetValue("sv_net_incoming_decompression_max_failures", 1);
+
+	else if (sv_net_incoming_decompression_max_failures.value > NET_DECOMPRESS_MAX_TIMES)
+		Cvar_SetValue("sv_net_incoming_decompression_max_failures", NET_DECOMPRESS_MAX_TIMES);
+
+	if (sv_net_incoming_decompression_max_failures.value < sv_net_incoming_decompression_min_failures.value)
+	{
+		int iTemp = sv_net_incoming_decompression_max_failures.value;
+		Cvar_SetValue("sv_net_incoming_decompression_max_failures", sv_net_incoming_decompression_min_failures.value);
+		Cvar_SetValue("sv_net_incoming_decompression_min_failures", iTemp);
+	}
+
+	if (sv_net_incoming_decompression_min_failuretime.value <= 0.0f)
+		Cvar_SetValue("sv_net_incoming_decompression_min_failuretime", 0.1f);
+}
+
+// Check for an abnormal size ratio between compressed and uncompressed data
+qboolean Netchan_ValidateDecompress(netchan_t *chan, int stream, unsigned int compressedSize, unsigned int uncompressedSize)
+{
+#ifdef REHLDS_FIXES
+	int		i;
+
+	if (sv_net_incoming_decompression_max_ratio.value <= 0)
+		return TRUE; // validation is disabled
+
+	if (compressedSize >= uncompressedSize)
+		return TRUE;
+
+	float ratio = ((float)(uncompressedSize - compressedSize) / uncompressedSize) * 100.0f;
+	if (ratio < sv_net_incoming_decompression_max_ratio.value)
+		return TRUE; // no low entropy for uncompressed data
+
+	if ((chan->player_slot - 1) != host_client - g_psvs.clients)
+		return TRUE;
+
+	Netchan_DecompressionCvarsBounds();
+
+	FragStats_t &stats = g_GameClients[chan->player_slot - 1]->GetFragStats(stream);
+
+	// check if the client should be rejected based on total failed decompress
+	if (stats.num_decompress_failures >= sv_net_incoming_decompression_max_failures.value)
+	{
+		for (i = 0; i < sv_net_incoming_decompression_max_failures.value - 1; i++)
+			stats.decompress_failure_times[i] = stats.decompress_failure_times[i + 1];
+
+		stats.num_decompress_failures = sv_net_incoming_decompression_max_failures.value - 1;
+	}
+
+	stats.decompress_failure_times[stats.num_decompress_failures++] = realtime;
+
+	// check if the client should be rejected based on recent failed decompress
+	int recent_failures = 0;
+	for (i = 0; i < stats.num_decompress_failures; i++)
+	{
+		if ((realtime - stats.decompress_failure_times[i]) <= sv_net_incoming_decompression_min_failuretime.value)
+			recent_failures++;
+	}
+
+	if (recent_failures >= sv_net_incoming_decompression_min_failures.value)
+	{
+		if (chan->player_slot == 0)
+			Con_DPrintf("Incoming abnormal uncompressed size with ratio %.2f\n", ratio);
+		else
+			Con_DPrintf("%s:Incoming abnormal uncompressed size with ratio %.2f from %s\n", NET_AdrToString(chan->remote_address), ratio, host_client->name);
+
+		if (sv_net_incoming_decompression_punish.value >= 0)
+		{
+			Con_DPrintf("%s:Banned for malformed/abnormal bzip2 fragments from %s\n", NET_AdrToString(chan->remote_address), host_client->name);
+			Cbuf_AddText(va("addip %.1f %s\n", sv_net_incoming_decompression_punish.value, NET_BaseAdrToString(chan->remote_address)));
+		}
+
+		return FALSE;
+	}
+#endif
+
+	return TRUE;
+}
+
 qboolean Netchan_CopyNormalFragments(netchan_t *chan)
 {
 	fragbuf_t *p, *n;
@@ -1430,6 +1582,9 @@ qboolean Netchan_CopyNormalFragments(netchan_t *chan)
 	}
 
 	p = chan->incomingbufs[FRAG_NORMAL_STREAM];
+
+	chan->incomingbufs[FRAG_NORMAL_STREAM] = nullptr;
+	chan->incomingready[FRAG_NORMAL_STREAM] = FALSE;
 
 	SZ_Clear(&net_message);
 	MSG_BeginReading();
@@ -1468,25 +1623,61 @@ qboolean Netchan_CopyNormalFragments(netchan_t *chan)
 		}
 
 		SZ_Clear(&net_message);
-
-		chan->incomingbufs[FRAG_NORMAL_STREAM] = nullptr;
-		chan->incomingready[FRAG_NORMAL_STREAM] = FALSE;
-
 		return FALSE;
 	}
 #endif // REHLDS_FIXES
 
 	if (*(uint32 *)net_message.data == MAKEID('B', 'Z', '2', '\0'))
 	{
+		// Determine whether decompression of compressed data is allowed
+#ifdef REHLDS_FIXES
+		if (!sv_net_incoming_decompression.value)
+		{
+			if (chan->player_slot == 0)
+			{
+				Con_DPrintf("Incoming compressed normal fragment disallowed from\n");
+				return FALSE;
+			}
+			// compressed data is expected only after requesting resource list
+			else if (host_client->m_sendrescount == 0)
+			{
+				Con_DPrintf("%s:Incoming compressed normal fragment disallowed from %s\n", NET_AdrToString(chan->remote_address), host_client->name);
+				return FALSE;
+			}
+		}
+#endif
+
 		char uncompressed[65536];
-		unsigned int uncompressedSize = 65536;
-		BZ2_bzBuffToBuffDecompress(uncompressed, &uncompressedSize, (char*)net_message.data + 4, net_message.cursize - 4, 1, 0);
+		unsigned int uncompressedSize = clamp((int)sv_net_incoming_decompression_max_size.value, 16, 65536); // valid range (16 - 65536) bytes
+		unsigned int compressedSize   = net_message.cursize - 4;
+
+		// Decompress net buffer data
+		qboolean success = TRUE;
+
+		if (BZ2_bzBuffToBuffDecompress(uncompressed, &uncompressedSize, (char *)net_message.data + 4, compressedSize, 1, 0) != BZ_OK)
+		{
+			// malformed data or compressed data exceeding sv_net_incoming_decompression_max_size
+			success = FALSE;
+		}
+		else if (!Netchan_ValidateDecompress(chan, FRAG_NORMAL_STREAM, compressedSize, uncompressedSize))
+		{
+			success = FALSE;
+		}
+
+#ifdef REHLDS_FIXES
+		if (!success)
+		{
+			// Drop client if decompression was unsuccessful
+			SV_DropClient(host_client, FALSE, "Malformed/abnormal compressed data");
+			SZ_Clear(&net_message);
+			return FALSE;
+		}
+#endif
+
+		// Copy uncompressed data back to the net buffer
 		Q_memcpy(net_message.data, uncompressed, uncompressedSize);
 		net_message.cursize = uncompressedSize;
 	}
-
-	chan->incomingbufs[FRAG_NORMAL_STREAM] = nullptr;
-	chan->incomingready[FRAG_NORMAL_STREAM] = FALSE;
 
 	return TRUE;
 }
@@ -1504,7 +1695,6 @@ qboolean Netchan_CopyFileFragments(netchan_t *chan)
 	qboolean bCompressed;
 	unsigned int uncompressedSize;
 
-
 	if (!chan->incomingready[FRAG_FILE_STREAM])
 		return FALSE;
 
@@ -1515,6 +1705,19 @@ qboolean Netchan_CopyFileFragments(netchan_t *chan)
 		chan->incomingready[FRAG_FILE_STREAM] = FALSE;
 		return FALSE;
 	}
+
+#ifdef REHLDS_FIXES
+	if (chan->player_slot > 0 && (chan->player_slot - 1) == host_client - g_psvs.clients)
+	{
+		// customization already uploaded with request by operator,
+		// do not accept any other customization
+		if (host_client->uploaddoneregistering)
+		{
+			SV_DropClient(host_client, FALSE, "Too many customization have been uploaded (unrequested customization)");
+			return FALSE;
+		}
+	}
+#endif
 
 	bCompressed = FALSE;
 	SZ_Clear(&net_message);
@@ -1630,10 +1833,53 @@ qboolean Netchan_CopyFileFragments(netchan_t *chan)
 
 	if (bCompressed)
 	{
-		unsigned char* uncompressedBuffer = (unsigned char*)Mem_Malloc(uncompressedSize);
-		Con_DPrintf("Decompressing file %s (%d -> %d)\n", filename, nsize, uncompressedSize);
-		BZ2_bzBuffToBuffDecompress((char*)uncompressedBuffer, &uncompressedSize, (char*)buffer, nsize, 1, 0);
+		// Determine whether decompression of compressed data is allowed
+#ifdef REHLDS_FIXES
+		if (!sv_net_incoming_decompression.value)
+		{
+			if (chan->player_slot == 0)
+			{
+				Con_DPrintf("Incoming compressed file fragment disallowed from\n");
+				return FALSE;
+			}
+			// compressed data is expected only after requesting resource list
+			else if (host_client->m_sendrescount == 0)
+			{
+				Con_DPrintf("%s:Incoming compressed file fragment disallowed from %s\n", NET_AdrToString(chan->remote_address), host_client->name);
+				return FALSE;
+			}
+		}
+#endif
+
+		uncompressedSize = clamp(uncompressedSize, 16u, (unsigned)sv_net_incoming_decompression_max_size.value); // valid range (16 - 65536) bytes
+
+		qboolean success = TRUE;
+		unsigned char *uncompressedBuffer = (unsigned char *)Mem_Malloc(uncompressedSize);
+		unsigned int compressedSize = nsize;
+
+		// Decompress net buffer data
+		if (BZ2_bzBuffToBuffDecompress((char *)uncompressedBuffer, &uncompressedSize, (char *)buffer, compressedSize, 1, 0) != BZ_OK)
+		{
+			// malformed data or compressed data exceeding sv_net_incoming_decompression_max_size
+			success = FALSE;
+		}
+		else if (!Netchan_ValidateDecompress(chan, FRAG_FILE_STREAM, compressedSize, uncompressedSize))
+		{
+			success = FALSE;
+		}
+
 		Mem_Free(buffer);
+
+		if (!success)
+		{
+			// Drop client if decompression was unsuccessful
+			SV_DropClient(host_client, FALSE, "Malformed/abnormal compressed data");
+			SZ_Clear(&net_message);
+			Mem_Free(uncompressedBuffer);
+			return FALSE;
+		}
+
+		Con_DPrintf("Decompressing file %s (%d -> %d)\n", filename, compressedSize, uncompressedSize);
 		pos = uncompressedSize;
 		buffer = uncompressedBuffer;
 	}
@@ -1824,6 +2070,15 @@ void Netchan_Init(void)
 	Cvar_RegisterVariable(&net_chokeloopback);
 	Cvar_RegisterVariable(&net_drawslider);
 	Cvar_RegisterVariable(&sv_filetransfercompression);
+#ifdef REHLDS_FIXES
+	Cvar_RegisterVariable(&sv_net_incoming_decompression);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_max_ratio);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_max_size);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_min_failures);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_max_failures);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_min_failuretime);
+	Cvar_RegisterVariable(&sv_net_incoming_decompression_punish);
+#endif
 	Cvar_RegisterVariable(&sv_filetransfermaxsize);
 }
 

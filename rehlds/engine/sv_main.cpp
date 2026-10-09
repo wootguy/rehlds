@@ -132,9 +132,46 @@ cvar_t sv_wateramp = { "sv_wateramp", "0", 0, 0.0f, NULL };
 
 void sv_cheats_hook_callback(cvar_t *cvar);
 void mapcyclefile_hook_callback(cvar_t *cvar);
+void sv_movevars_hook_callback(cvar_t *cvar);
 
 cvarhook_t sv_cheats_hook = { sv_cheats_hook_callback, NULL, NULL };
 cvarhook_t mapcyclefile_hook = { mapcyclefile_hook_callback, NULL, NULL };
+
+//------------------------------------------------
+// Movevars cvarhook declares
+//------------------------------------------------
+
+#define DECLARE_CVARHOOK_MOVEVARS(cvar)\
+	cvarhook_t cvar##_hook = { sv_movevars_hook_callback, NULL, NULL }
+
+#define CVARHOOK_MOVEVARS(cvar)\
+	Cvar_HookVariable(cvar.name, &cvar##_hook);
+
+DECLARE_CVARHOOK_MOVEVARS(sv_gravity);
+DECLARE_CVARHOOK_MOVEVARS(sv_stopspeed);
+DECLARE_CVARHOOK_MOVEVARS(sv_maxspeed);
+DECLARE_CVARHOOK_MOVEVARS(sv_spectatormaxspeed);
+DECLARE_CVARHOOK_MOVEVARS(sv_accelerate);
+DECLARE_CVARHOOK_MOVEVARS(sv_airaccelerate);
+DECLARE_CVARHOOK_MOVEVARS(sv_wateraccelerate);
+DECLARE_CVARHOOK_MOVEVARS(sv_friction);
+DECLARE_CVARHOOK_MOVEVARS(sv_edgefriction);
+DECLARE_CVARHOOK_MOVEVARS(sv_waterfriction);
+DECLARE_CVARHOOK_MOVEVARS(sv_bounce);
+DECLARE_CVARHOOK_MOVEVARS(sv_stepsize);
+DECLARE_CVARHOOK_MOVEVARS(sv_maxvelocity);
+DECLARE_CVARHOOK_MOVEVARS(sv_zmax);
+DECLARE_CVARHOOK_MOVEVARS(sv_wateramp);
+DECLARE_CVARHOOK_MOVEVARS(sv_footsteps);
+DECLARE_CVARHOOK_MOVEVARS(sv_rollangle);
+DECLARE_CVARHOOK_MOVEVARS(sv_rollspeed);
+DECLARE_CVARHOOK_MOVEVARS(sv_skycolor_r);
+DECLARE_CVARHOOK_MOVEVARS(sv_skycolor_g);
+DECLARE_CVARHOOK_MOVEVARS(sv_skycolor_b);
+DECLARE_CVARHOOK_MOVEVARS(sv_skyvec_x);
+DECLARE_CVARHOOK_MOVEVARS(sv_skyvec_y);
+DECLARE_CVARHOOK_MOVEVARS(sv_skyvec_z);
+DECLARE_CVARHOOK_MOVEVARS(sv_skyname);
 
 cvar_t sv_skyname = { "sv_skyname", "desert", 0, 0.0f, NULL };
 cvar_t mapcyclefile = { "mapcyclefile", "mapcycle.txt", 0, 0.0f, NULL };
@@ -166,6 +203,16 @@ cvar_t sv_newunit = { "sv_newunit", "0", 0, 0.0f, NULL };
 
 cvar_t sv_clienttrace = { "sv_clienttrace", "1", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_timeout = { "sv_timeout", "60", 0, 0.0f, NULL };
+#ifdef REHLDS_FIXES
+// Hard deadline (in seconds) for a client to complete a reconnect after a level change.
+// A client that SV_InactivateClients put into the reconnect-pending state but that never
+// re-initiates its connection within this window is force-dropped by SV_CheckTimeouts,
+// independent of the netchan inactivity timeout. This defeats the oxware "svc_stufftext
+// reconnect filter" phantom-slot exploit: the cheat blocks the engine's "reconnect" command
+// on changelevel and keeps the netchan warm, so the normal sv_timeout (which keys off
+// netchan.last_received) never fires and the half-connected slot survives forever. 0 = disabled.
+cvar_t sv_reconnect_timeout = { "sv_reconnect_timeout", "30", 0, 0.0f, NULL };
+#endif // REHLDS_FIXES
 cvar_t sv_failuretime = { "sv_failuretime", "0.5", 0, 0.0f, NULL };
 cvar_t sv_cheats = { "sv_cheats", "0", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_password = { "sv_password", "", FCVAR_SERVER | FCVAR_PROTECTED, 0.0f, NULL };
@@ -193,6 +240,8 @@ cvar_t sv_version = { "sv_version", "", FCVAR_SERVER, 0.0f, NULL };
 cvar_t sv_version = {"sv_version", "", 0, 0.0f, NULL};
 #endif
 
+cvar_t sv_tags = { "sv_tags", "", 0, 0.0f, NULL };
+
 cvar_t sv_rcon_minfailures = { "sv_rcon_minfailures", "5", 0, 0.0f, NULL };
 cvar_t sv_rcon_maxfailures = { "sv_rcon_maxfailures", "10", 0, 0.0f, NULL };
 cvar_t sv_rcon_minfailuretime = { "sv_rcon_minfailuretime", "30", 0, 0.0f, NULL };
@@ -216,6 +265,7 @@ cvar_t sv_rehlds_send_mapcycle = { "sv_rehlds_send_mapcycle", "0", 0, 0.0f, null
 cvar_t sv_rehlds_maxclients_from_single_ip = { "sv_rehlds_maxclients_from_single_ip", "5", 0, 5.0f, nullptr };
 cvar_t sv_use_entity_file = { "sv_use_entity_file", "0", 0, 0.0f, nullptr };
 cvar_t sv_usercmd_custom_random_seed = { "sv_usercmd_custom_random_seed", "0", 0, 0.0f, nullptr };
+cvar_t sv_rehlds_allow_large_sprays = { "sv_rehlds_allow_large_sprays", "1", 0, 1.0f, nullptr };
 cvar_t sv_lowercase = { "sv_lowercase", "1", 0, 1.0f, nullptr };
 cvar_t sv_precache_bspmodels = { "sv_precache_bspmodels", "1", 0, 1.0f, nullptr };
 cvar_t sv_printcvar = { "sv_printcvar", "1", 0, 1.0f, nullptr };
@@ -972,35 +1022,35 @@ void SV_Multicast(edict_t *ent, vec_t *origin, int to, qboolean reliable)
 	host_client = save;
 }
 
-void EXT_FUNC SV_WriteMovevarsToClient(sizebuf_t *message)
+void SV_WriteMovevarsToClient(sizebuf_t *message, movevars_t *movevars)
 {
 	MSG_WriteByte(message, svc_newmovevars);
-	MSG_WriteFloat(message, movevars.gravity);
-	MSG_WriteFloat(message, movevars.stopspeed);
-	MSG_WriteFloat(message, movevars.maxspeed);
-	MSG_WriteFloat(message, movevars.spectatormaxspeed);
-	MSG_WriteFloat(message, movevars.accelerate);
-	MSG_WriteFloat(message, movevars.airaccelerate);
-	MSG_WriteFloat(message, movevars.wateraccelerate);
-	MSG_WriteFloat(message, movevars.friction);
-	MSG_WriteFloat(message, movevars.edgefriction);
-	MSG_WriteFloat(message, movevars.waterfriction);
-	MSG_WriteFloat(message, movevars.entgravity);
-	MSG_WriteFloat(message, movevars.bounce);
-	MSG_WriteFloat(message, movevars.stepsize);
-	MSG_WriteFloat(message, movevars.maxvelocity);
-	MSG_WriteFloat(message, movevars.zmax);
-	MSG_WriteFloat(message, movevars.waveHeight);
-	MSG_WriteByte(message, movevars.footsteps != 0);
-	MSG_WriteFloat(message, movevars.rollangle);
-	MSG_WriteFloat(message, movevars.rollspeed);
-	MSG_WriteFloat(message, movevars.skycolor_r);
-	MSG_WriteFloat(message, movevars.skycolor_g);
-	MSG_WriteFloat(message, movevars.skycolor_b);
-	MSG_WriteFloat(message, movevars.skyvec_x);
-	MSG_WriteFloat(message, movevars.skyvec_y);
-	MSG_WriteFloat(message, movevars.skyvec_z);
-	MSG_WriteString(message, movevars.skyName);
+	MSG_WriteFloat(message, movevars->gravity);
+	MSG_WriteFloat(message, movevars->stopspeed);
+	MSG_WriteFloat(message, movevars->maxspeed);
+	MSG_WriteFloat(message, movevars->spectatormaxspeed);
+	MSG_WriteFloat(message, movevars->accelerate);
+	MSG_WriteFloat(message, movevars->airaccelerate);
+	MSG_WriteFloat(message, movevars->wateraccelerate);
+	MSG_WriteFloat(message, movevars->friction);
+	MSG_WriteFloat(message, movevars->edgefriction);
+	MSG_WriteFloat(message, movevars->waterfriction);
+	MSG_WriteFloat(message, movevars->entgravity);
+	MSG_WriteFloat(message, movevars->bounce);
+	MSG_WriteFloat(message, movevars->stepsize);
+	MSG_WriteFloat(message, movevars->maxvelocity);
+	MSG_WriteFloat(message, movevars->zmax);
+	MSG_WriteFloat(message, movevars->waveHeight);
+	MSG_WriteByte(message, movevars->footsteps != 0);
+	MSG_WriteFloat(message, movevars->rollangle);
+	MSG_WriteFloat(message, movevars->rollspeed);
+	MSG_WriteFloat(message, movevars->skycolor_r);
+	MSG_WriteFloat(message, movevars->skycolor_g);
+	MSG_WriteFloat(message, movevars->skycolor_b);
+	MSG_WriteFloat(message, movevars->skyvec_x);
+	MSG_WriteFloat(message, movevars->skyvec_y);
+	MSG_WriteFloat(message, movevars->skyvec_z);
+	MSG_WriteString(message, movevars->skyName);
 }
 
 void EXT_FUNC SV_WriteDeltaDescriptionsToClient(sizebuf_t *msg)
@@ -1029,76 +1079,41 @@ void EXT_FUNC SV_WriteDeltaDescriptionsToClient(sizebuf_t *msg)
 	}
 }
 
-void EXT_FUNC SV_SetMoveVars(void)
+void sv_movevars_hook_callback(cvar_t *cvar)
 {
-	movevars.entgravity			= 1.0f;
-	movevars.gravity			= sv_gravity.value;
-	movevars.stopspeed			= sv_stopspeed.value;
-	movevars.maxspeed			= sv_maxspeed.value;
-	movevars.spectatormaxspeed	= sv_spectatormaxspeed.value;
-	movevars.accelerate			= sv_accelerate.value;
-	movevars.airaccelerate		= sv_airaccelerate.value;
-	movevars.wateraccelerate	= sv_wateraccelerate.value;
-	movevars.friction			= sv_friction.value;
-	movevars.edgefriction		= sv_edgefriction.value;
-	movevars.waterfriction		= sv_waterfriction.value;
-	movevars.bounce				= sv_bounce.value;
-	movevars.stepsize			= sv_stepsize.value;
-	movevars.maxvelocity		= sv_maxvelocity.value;
-	movevars.zmax				= sv_zmax.value;
-	movevars.waveHeight			= sv_wateramp.value;
-	movevars.footsteps			= sv_footsteps.value;
-	movevars.rollangle			= sv_rollangle.value;
-	movevars.rollspeed			= sv_rollspeed.value;
-	movevars.skycolor_r			= sv_skycolor_r.value;
-	movevars.skycolor_g			= sv_skycolor_g.value;
-	movevars.skycolor_b			= sv_skycolor_b.value;
-	movevars.skyvec_x			= sv_skyvec_x.value;
-	movevars.skyvec_y			= sv_skyvec_y.value;
-	movevars.skyvec_z			= sv_skyvec_z.value;
-
-	Q_strncpy(movevars.skyName, sv_skyname.string, sizeof(movevars.skyName) - 1);
-	movevars.skyName[sizeof(movevars.skyName) - 1] = 0;
+	SV_SetMoveVars(&sv_movevars);
 }
 
-void SV_QueryMovevarsChanged(void)
+void SV_SetMoveVars(movevars_t *movevars)
 {
-	if (movevars.entgravity				!= 1.0f
-		|| sv_maxspeed.value			!= movevars.maxspeed
-		|| sv_gravity.value				!= movevars.gravity
-		|| sv_stopspeed.value			!= movevars.stopspeed
-		|| sv_spectatormaxspeed.value	!= movevars.spectatormaxspeed
-		|| sv_accelerate.value			!= movevars.accelerate
-		|| sv_airaccelerate.value		!= movevars.airaccelerate
-		|| sv_wateraccelerate.value		!= movevars.wateraccelerate
-		|| sv_friction.value			!= movevars.friction
-		|| sv_edgefriction.value		!= movevars.edgefriction
-		|| sv_waterfriction.value		!= movevars.waterfriction
-		|| sv_bounce.value				!= movevars.bounce
-		|| sv_stepsize.value			!= movevars.stepsize
-		|| sv_maxvelocity.value			!= movevars.maxvelocity
-		|| sv_zmax.value				!= movevars.zmax
-		|| sv_wateramp.value			!= movevars.waveHeight
-		|| sv_footsteps.value			!= movevars.footsteps
-		|| sv_rollangle.value			!= movevars.rollangle
-		|| sv_rollspeed.value			!= movevars.rollspeed
-		|| sv_skycolor_r.value			!= movevars.skycolor_r
-		|| sv_skycolor_g.value			!= movevars.skycolor_g
-		|| sv_skycolor_b.value			!= movevars.skycolor_b
-		|| sv_skyvec_x.value			!= movevars.skyvec_x
-		|| sv_skyvec_y.value			!= movevars.skyvec_y
-		|| sv_skyvec_z.value			!= movevars.skyvec_z
-		|| Q_strcmp(sv_skyname.string, movevars.skyName))
-	{
-		SV_SetMoveVars();
+	movevars->entgravity		= 1.0f;
+	movevars->gravity			= sv_gravity.value;
+	movevars->stopspeed			= sv_stopspeed.value;
+	movevars->maxspeed			= sv_maxspeed.value;
+	movevars->spectatormaxspeed	= sv_spectatormaxspeed.value;
+	movevars->accelerate		= sv_accelerate.value;
+	movevars->airaccelerate		= sv_airaccelerate.value;
+	movevars->wateraccelerate	= sv_wateraccelerate.value;
+	movevars->friction			= sv_friction.value;
+	movevars->edgefriction		= sv_edgefriction.value;
+	movevars->waterfriction		= sv_waterfriction.value;
+	movevars->bounce			= sv_bounce.value;
+	movevars->stepsize			= sv_stepsize.value;
+	movevars->maxvelocity		= sv_maxvelocity.value;
+	movevars->zmax				= sv_zmax.value;
+	movevars->waveHeight		= sv_wateramp.value;
+	movevars->footsteps			= sv_footsteps.value;
+	movevars->rollangle			= sv_rollangle.value;
+	movevars->rollspeed			= sv_rollspeed.value;
+	movevars->skycolor_r		= sv_skycolor_r.value;
+	movevars->skycolor_g		= sv_skycolor_g.value;
+	movevars->skycolor_b		= sv_skycolor_b.value;
+	movevars->skyvec_x			= sv_skyvec_x.value;
+	movevars->skyvec_y			= sv_skyvec_y.value;
+	movevars->skyvec_z			= sv_skyvec_z.value;
 
-		client_t *cl = g_psvs.clients;
-		for (int i = 0; i < g_psvs.maxclients; i++, cl++)
-		{
-			if (!cl->fakeclient && (cl->active || cl->spawned || cl->connected))
-				SV_WriteMovevarsToClient(&cl->netchan.message);
-		}
-	}
+	Q_strncpy(movevars->skyName, sv_skyname.string, sizeof(movevars->skyName) - 1);
+	movevars->skyName[sizeof(movevars->skyName) - 1] = 0;
 }
 
 void EXT_FUNC SV_SendServerinfo_mod(sizebuf_t *msg, IGameClient* cl)
@@ -1205,8 +1220,8 @@ void SV_SendServerinfo_internal(sizebuf_t *msg, client_t *client)
 	MSG_WriteByte(msg, sv_cheats.value != 0);
 
 	SV_WriteDeltaDescriptionsToClient(msg);
-	SV_SetMoveVars();
-	SV_WriteMovevarsToClient(msg);
+	SV_SetMoveVars(&sv_movevars);
+	SV_WriteMovevarsToClient(msg, &sv_movevars);
 
 	MSG_WriteByte(msg, svc_cdtrack);
 	MSG_WriteByte(msg, gGlobalVariables.cdAudioTrack);
@@ -1217,6 +1232,7 @@ void SV_SendServerinfo_internal(sizebuf_t *msg, client_t *client)
 	client->spawned = FALSE;
 	client->connected = TRUE;
 	client->fully_connected = FALSE;
+	client->movevars = sv_movevars;
 }
 
 bool SV_ShouldSendResource(resource_t* res, uint64_t steamid) {
@@ -1224,6 +1240,11 @@ bool SV_ShouldSendResource(resource_t* res, uint64_t steamid) {
 }
 
 void SV_SendResources(sizebuf_t *msg)
+{
+	g_RehldsHookchains.m_SV_SendResources.callChain(SV_SendResources_internal, msg);
+}
+
+void EXT_FUNC SV_SendResources_internal(sizebuf_t *msg)
 {
 	unsigned char nullbuffer[32];
 	Q_memset(nullbuffer, 0, sizeof(nullbuffer));
@@ -1508,7 +1529,12 @@ void SV_WriteSpawn(sizebuf_t *msg)
 	MSG_WriteByte(msg, svc_signonnum);
 	MSG_WriteByte(msg, 1);
 
+#ifdef REHLDS_FIXES
+	host_client->connecttime = realtime;
+#else
 	host_client->connecttime = 0.0;
+#endif
+
 	host_client->ignorecmdtime = 0.0;
 	host_client->cmdtime = 0.0;
 	host_client->active = TRUE;
@@ -1523,17 +1549,17 @@ void SV_WriteSpawn(sizebuf_t *msg)
 	NotifyDedicatedServerUI("UpdatePlayers");
 }
 
-void EXT_FUNC SV_SendUserReg(sizebuf_t *msg)
+void SV_SendUserReg(sizebuf_t *msg, UserMsg *pUserMsgs)
 {
-	for (UserMsg *pMsg = sv_gpNewUserMsgs; pMsg; pMsg = pMsg->next)
+	if (!pUserMsgs)
+		return;
+
+	for (UserMsg *pMsg = pUserMsgs; pMsg; pMsg = pMsg->next)
 	{
 		MSG_WriteByte(msg, svc_newusermsg);
 		MSG_WriteByte(msg, pMsg->iMsg);
 		MSG_WriteByte(msg, pMsg->iSize);
-		MSG_WriteLong(msg, *(int *)&pMsg->szName[0]);
-		MSG_WriteLong(msg, *(int *)&pMsg->szName[4]);
-		MSG_WriteLong(msg, *(int *)&pMsg->szName[8]);
-		MSG_WriteLong(msg, *(int *)&pMsg->szName[12]);
+		MSG_WriteBuf(msg, sizeof(pMsg->szName), pMsg->szName);
 	}
 }
 
@@ -1575,6 +1601,12 @@ void SV_New_f(void)
 #endif
 	host_client->m_sendrescount = 0;
 
+#ifdef REHLDS_FIXES
+	// DoS hardening: refresh the dlfile token bucket, the client is about to
+	// request the resources it is missing on this map (issue #1200).
+	g_DlFileRateLimiter.ClientConnected(host_client - g_psvs.clients);
+#endif
+
 	SZ_Clear(&host_client->netchan.message);
 	SZ_Clear(&host_client->datagram);
 
@@ -1582,13 +1614,7 @@ void SV_New_f(void)
 
 	SV_SendServerinfo(&msg, host_client);
 
-	if (sv_gpUserMsgs)
-	{
-		UserMsg *pTemp = sv_gpNewUserMsgs;
-		sv_gpNewUserMsgs = sv_gpUserMsgs;
-		SV_SendUserReg(&msg);
-		sv_gpNewUserMsgs = pTemp;
-	}
+	SV_SendUserReg(&msg, sv_gpUserMsgs);
 	host_client->hasusrmsgs = TRUE;
 
 	// TODO: set userinfo to be sent?
@@ -2572,15 +2598,19 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 	{
 		Con_DPrintf("Client %s connected\nAdr: %s\n", name, NET_AdrToString(host_client->netchan.remote_address));
 	}
-#ifndef REHLDS_OPT_PEDANTIC
+#if !defined(REHLDS_FIXES) && !defined(REHLDS_OPT_PEDANTIC)
 	Q_strncpy(host_client->hashedcdkey, cdkey, 32);
 	host_client->hashedcdkey[32] = '\0';
 #else
 	MD5Context_t ctx;
 	MD5Init(&ctx);
+#ifdef REHLDS_FIXES
+	MD5Update(&ctx, (unsigned char *)&host_client->network_userid.clientip, sizeof(unsigned int));
+#else
 	MD5Update(&ctx, (unsigned char *)cdkey, sizeof(cdkey));
+#endif // REHLDS_FIXES
 	MD5Final((unsigned char *)host_client->hashedcdkey, &ctx);
-#endif
+#endif // !defined(REHLDS_FIXES) && !defined(REHLDS_OPT_PEDANTIC)
 
 	host_client->active = FALSE;
 	host_client->spawned = FALSE;
@@ -2591,6 +2621,10 @@ void EXT_FUNC SV_ConnectClient_internal(void)
 #ifdef REHLDS_FIXES
 	host_client->m_bSentNewResponse = FALSE;
 	g_GameClients[host_client - g_psvs.clients]->SetSpawnedOnce(false);
+	// Client (re)established its connection, so it obeyed the level-change "reconnect" command.
+	// Disarm the deadline armed by SV_InactivateClients. This happens before any resource
+	// download/spawn, so downloading players are never affected.
+	g_GameClients[host_client - g_psvs.clients]->SetReconnectDeadline(0.0);
 #endif // REHLDS_FIXES
 
 	bIsSecure = Steam_GSBSecure();
@@ -3352,6 +3386,159 @@ void SV_ResetRcon_f(void)
 	Q_memset(g_rgRconFailures, 0, sizeof(g_rgRconFailures));
 }
 
+const int MAX_RCON_USERS = 128;
+ipfilter_t rconusers[MAX_RCON_USERS];
+int numrconusers = 0;
+
+qboolean SV_CheckRconAllowed(const netadr_t *adr)
+{
+	if (numrconusers <= 0)
+		return TRUE; // Rcon user list empty so assume allowed it for all
+
+	for (int i = numrconusers - 1; i >= 0; i--)
+	{
+		ipfilter_t *curFilter = &rconusers[i];
+		if (curFilter->compare.u32 == 0xFFFFFFFF || (*(uint32*)adr->ip & curFilter->mask) == curFilter->compare.u32)
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+void SV_RconAddUser_f(void)
+{
+	if (Cmd_Argc() != 2)
+	{
+		Con_Printf("Usage: rcon_adduser <ipaddress/CIDR>\n"
+			"ipaddress A.B.C.D/24 is equivalent to A.B.C.0 and A.B.C\n");
+		return;
+	}
+
+	ipfilter_t tempFilter;
+	if (!StringToFilter(Cmd_Argv(1), &tempFilter))
+	{
+		Con_Printf("Invalid IP address!\nUsage: rcon_adduser <ipaddress>\n");
+		return;
+	}
+
+	int i = 0;
+	for (; i < numrconusers; i++)
+	{
+		if (rconusers[i].mask == tempFilter.mask && rconusers[i].compare.u32 == tempFilter.compare.u32)
+		{
+			rconusers[i].cidr = tempFilter.cidr;
+			return;
+		}
+	}
+
+	if (numrconusers >= MAX_RCON_USERS)
+	{
+		Con_Printf("IP rcon users is full\n");
+		return;
+	}
+
+	numrconusers++;
+	rconusers[i].compare = tempFilter.compare;
+	rconusers[i].mask = tempFilter.mask;
+	rconusers[i].cidr = tempFilter.cidr;
+}
+
+void SV_RconDelUser_f(void)
+{
+	int argCount = Cmd_Argc();
+	if (argCount != 2 && argCount != 3)
+	{
+		Con_Printf("Usage: rcon_deluser <ipaddress> {removeAll}\n"
+				   "removeip <ipaddress/CIDR> {removeAll}\n"
+				   "Use removeAll to delete all Rcon ip users which ipaddress or ipaddress/CIDR includes\n");
+
+		return;
+	}
+
+	ipfilter_t f;
+
+	if (!StringToFilter(Cmd_Argv(1), &f))
+	{
+		Con_Printf("Invalid IP address\n"
+				   "Usage: rcon_deluser <ipaddress> {removeAll}\n"
+				   "       rcon_deluser <ipaddress/CIDR> {removeAll}\n"
+				   "Use removeAll to delete all Rcon ip users which ipaddress or ipaddress/CIDR includes\n");
+		return;
+	}
+
+	bool found = false;
+	for (int i = 0; i < numrconusers; i++)
+	{
+		if ((argCount == 2 && rconusers[i].mask == f.mask && rconusers[i].compare.u32 == f.compare.u32) ||
+			(argCount == 3 && IsFilterIncludesAnotherFilter(f, rconusers[i])))
+		{
+			if (i + 1 < numrconusers)
+				Q_memmove(&rconusers[i], &rconusers[i + 1], (numrconusers - (i + 1)) * sizeof(ipfilter_t));
+			numrconusers--;
+			rconusers[numrconusers].banTime = 0.0f;
+			rconusers[numrconusers].banEndTime = 0.0f;
+			rconusers[numrconusers].compare.u32 = 0;
+			rconusers[numrconusers].mask = 0;
+			found = true;
+			--i;
+
+			if (argCount == 2)
+				break;
+		}
+	}
+
+	if (found)
+		Con_Printf("Rcon user IP removed.\n");
+
+	else
+	{
+		Con_Printf("rcon_deluser: couldn't find %s.\n", Cmd_Argv(1));
+	}
+}
+
+void SV_RconUsers_f(void)
+{
+	if (numrconusers <= 0)
+	{
+		Con_Printf("Rcon user IP list: empty\n");
+		return;
+	}
+
+	bool isNew = Cmd_Argc() == 2;
+	bool searchByFilter = isNew && isdigit(Cmd_Argv(1)[0]);
+	ipfilter_t filter;
+
+	if (searchByFilter)
+	{
+		if (!StringToFilter(Cmd_Argv(1), &filter))
+			return;
+
+		Con_Printf("Rcon user IP list for %s:\n", Cmd_Argv(1));
+	}
+	else
+	{
+		Con_Printf("Rcon user IP list:\n");
+	}
+
+	for (int i = 0; i < numrconusers; i++)
+	{
+		uint8 *b = rconusers[i].compare.octets;
+		if (isNew)
+		{
+			if (!searchByFilter || IsFilterIncludesAnotherFilter(filter, rconusers[i]))
+			{
+				char strFilter[32];
+				FilterToString(rconusers[i], strFilter);
+				Con_Printf("%-18s\n", strFilter);
+			}
+		}
+		else if (CanBeWrittenWithoutCIDR(rconusers[i]))
+		{
+			Con_Printf("%3i.%3i.%3i.%3i\n", b[0], b[1], b[2], b[3]);
+		}
+	}
+}
+
 void SV_AddFailedRcon(netadr_t *adr)
 {
 	int i;
@@ -3480,10 +3667,21 @@ qboolean SV_CheckRconFailure(netadr_t *adr)
 	return FALSE;
 }
 
+#define RCON_RESULT_SUCCESS       0 // allow the rcon
+#define RCON_RESULT_BADPASSWORD   1 // reject it, bad password
+#define RCON_RESULT_BADCHALLENGE  2 // bad challenge
+#define RCON_RESULT_BANNING       3 // decline it, banning for rcon hacking attempts
+#define RCON_RESULT_NOSETPASSWORD 4 // rcon password is not set
+#define RCON_RESULT_NOPRIVILEGE   5 // user attempt with valid password but is not privileged
+
 int SV_Rcon_Validate(void)
 {
-	if (Cmd_Argc() < 3 || Q_strlen(rcon_password.string) == 0)
-		return 1;
+	if (Cmd_Argc() < 3)
+		return RCON_RESULT_BADPASSWORD;
+
+	// Must have a password set to allow any rconning
+	if (Q_strlen(rcon_password.string) == 0)
+		return RCON_RESULT_NOSETPASSWORD;
 
 	if (sv_rcon_banpenalty.value < 0.0f)
 		Cvar_SetValue("sv_rcon_banpenalty", 0.0);
@@ -3492,78 +3690,105 @@ int SV_Rcon_Validate(void)
 	{
 		Con_Printf("Banning %s for rcon hacking attempts\n", NET_AdrToString(net_from));
 		Cbuf_AddText(va("addip %i %s\n", (int)sv_rcon_banpenalty.value, NET_BaseAdrToString(net_from)));
-		return 3;
+		return RCON_RESULT_BANNING;
 	}
 
 	if (!SV_CheckChallenge(&net_from, Q_atoi(Cmd_Argv(1))))
-		return 2;
+		return RCON_RESULT_BADCHALLENGE; // The client is spoofing...
 
+	// If the pw does not match, then disallow command
 	if (Q_strcmp(Cmd_Argv(2), rcon_password.string))
 	{
 		SV_AddFailedRcon(&net_from);
-		return 1;
+		return RCON_RESULT_BADPASSWORD;
 	}
-	return 0;
+
+	if (!SV_CheckRconAllowed(&net_from))
+	{
+		Con_Printf("Banning %s for rcon attempts without privileged\n", NET_AdrToString(net_from));
+		Cbuf_AddText(va("addip %i %s\n", (int)sv_rcon_banpenalty.value, NET_BaseAdrToString(net_from)));
+		return RCON_RESULT_NOPRIVILEGE;
+	}
+
+	// Otherwise it's ok
+	return RCON_RESULT_SUCCESS;
 }
 
+// A client issued an rcom command
+// Shift down the remaining args and redirect all Con_Printf
 void SV_Rcon(netadr_t *net_from_)
 {
-	char remaining[512];
-	char rcon_buff[1024];
+	int		invalid;
+	char	remaining[1024];
+	char	rcon_buff[512];
+	int		len;
 
-	int invalid = SV_Rcon_Validate();
-	int len = net_message.cursize - Q_strlen("rcon");
-	if (len <= 0 || len >= sizeof(remaining))
+	// Verify this user has access rights
+	invalid = SV_Rcon_Validate();
+
+	len = net_message.cursize - Q_strlen("rcon");
+	if (len <= 0 || len >= sizeof(rcon_buff))
 		return;
 
-	Q_memcpy(remaining, &net_message.data[Q_strlen("rcon")], len);
-	remaining[len] = 0;
+	Q_memcpy(rcon_buff, &net_message.data[Q_strlen("rcon")], len);
+	rcon_buff[len] = 0;
 
 #ifdef REHLDS_FIXES
 	if (sv_rcon_condebug.value > 0.0f)
 #endif
 	{
-		if (invalid)
+		if (invalid != RCON_RESULT_SUCCESS)
 		{
-			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), remaining);
-			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", remaining, NET_AdrToString(*net_from_));
+			Con_Printf("Bad Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
+			Log_Printf("Bad Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
 		}
 		else
 		{
-			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), remaining);
-			Log_Printf("Rcon: \"%s\" from \"%s\"\n", remaining, NET_AdrToString(*net_from_));
+			Con_Printf("Rcon from %s:\n%s\n", NET_AdrToString(*net_from_), rcon_buff);
+			Log_Printf("Rcon: \"%s\" from \"%s\"\n", rcon_buff, NET_AdrToString(*net_from_));
 		}
 	}
 
 	SV_BeginRedirect(RD_PACKET, net_from_);
 
-	if (invalid)
+	switch (invalid)
 	{
-		if (invalid == 2)
-			Con_Printf("Bad rcon_password.\n");
-		else if (Q_strlen(rcon_password.string) == 0)
-			Con_Printf("Bad rcon_password.\nNo password set for this server.\n");
-		else
-			Con_Printf("Bad rcon_password.\n");
+	case RCON_RESULT_SUCCESS:
+	{
+		char *data;
+		data = COM_Parse(rcon_buff);
+		data = COM_Parse(data);
+		data = COM_Parse(data);
 
-		SV_EndRedirect();
-		return;
+		if (data)
+		{
+			Q_strncpy(remaining, data, sizeof(remaining) - 1);
+			remaining[sizeof(remaining) - 1] = 0;
+
+			Cmd_ExecuteString(remaining, src_command);
 	}
-	char *data = COM_Parse(COM_Parse(COM_Parse(remaining)));
-	if (!data)
+		else
 	{
 		Con_Printf("Empty rcon\n");
+		}
 
-#ifdef REHLDS_FIXES
-		//missing SV_EndRedirect()
-		SV_EndRedirect();
-#endif // REHLDS_FIXES
-		return;
+		break;
+	}
+	case RCON_RESULT_BANNING:
+	case RCON_RESULT_BADPASSWORD:
+		Con_Printf("Bad rcon_password.\n");
+		break;
+	case RCON_RESULT_NOPRIVILEGE:
+		Con_Printf("Bad rcon_password.\nNo privilege.\n");
+		break;
+	case RCON_RESULT_NOSETPASSWORD:
+		Con_Printf("Bad rcon_password.\nNo password set for this server.\n");
+		break;
+	case RCON_RESULT_BADCHALLENGE:
+		Con_Printf("Bad rcon_password.\nBad challenge.\n");
+		break;
 	}
 
-	Q_strncpy(rcon_buff, data, sizeof(rcon_buff) - 1);
-	rcon_buff[sizeof(rcon_buff) - 1] = 0;
-	Cmd_ExecuteString(rcon_buff, src_command);
 	SV_EndRedirect();
 }
 
@@ -3663,6 +3888,12 @@ void SV_ProcessFile(client_t *cl, char *filename)
 		return;
 	}
 
+	if (!sv_allow_upload.value)
+	{
+		Con_NetPrintf("Ignoring incoming customization file upload of %s from %s\n", filename, NET_AdrToString(cl->netchan.remote_address));
+		return;
+	}
+
 	COM_HexConvert(filename + 4, 32, md5);
 	resource = cl->resourcesneeded.pNext;
 	bFound = FALSE;
@@ -3721,13 +3952,20 @@ void SV_ProcessFile(client_t *cl, char *filename)
 
 qboolean SV_FilterPacket(void)
 {
+	// sv_filterban filtering IP mode
+	// -1: all players will be rejected without any exceptions
+	//  0: no checks will happen
+	//  1: all incoming players will be checked if they're IP banned (if they have an IP filter entry), if they are, they will be kicked
+
+	qboolean bNegativeFilter = (sv_filterban.value == 1) ? TRUE : FALSE;
+
 	for (int i = numipfilters - 1; i >= 0; i--)
 	{
 		ipfilter_t* curFilter = &ipfilters[i];
 		if (curFilter->compare.u32 == 0xFFFFFFFF || curFilter->banEndTime == 0.0f || curFilter->banEndTime > realtime)
 		{
 			if ((*(uint32*)net_from.ip & curFilter->mask) == curFilter->compare.u32)
-				return (int)sv_filterban.value;
+				return bNegativeFilter;
 		}
 		else
 		{
@@ -3737,7 +3975,8 @@ qboolean SV_FilterPacket(void)
 			--numipfilters;
 		}
 	}
-	return sv_filterban.value == 0.0f;
+
+	return !bNegativeFilter;
 }
 
 void SV_SendBan(void)
@@ -3851,6 +4090,29 @@ void SV_CheckTimeouts(void)
 			continue;
 		if (!cl->connected && !cl->active && !cl->spawned)
 			continue;
+#ifdef REHLDS_FIXES
+		// Force-drop a client that was inactivated on level change but never re-initiated its
+		// connection within sv_reconnect_timeout. This deadline is measured from the inactivation
+		// time (see SV_InactivateClients), NOT from netchan.last_received, so a cheat that keeps
+		// the netchan warm to block the "reconnect" command (oxware svc_stufftext filter ->
+		// phantom slot) cannot dodge it the way it dodges the normal sv_timeout.
+		double reconnectDeadline = g_GameClients[i]->GetReconnectDeadline();
+		if (reconnectDeadline != 0.0)
+		{
+			if (cl->fully_connected)
+			{
+				// Reconnect finished normally; stand down.
+				g_GameClients[i]->SetReconnectDeadline(0.0);
+			}
+			else if (sv_reconnect_timeout.value > 0.0 && (realtime - reconnectDeadline) > sv_reconnect_timeout.value)
+			{
+				Con_DPrintf("Dropping %s: failed to reconnect within %.0fs after level change\n", cl->name, sv_reconnect_timeout.value);
+				g_GameClients[i]->SetReconnectDeadline(0.0);
+				SV_DropClient(cl, FALSE, "Failed to reconnect after level change");
+				continue;
+			}
+		}
+#endif // REHLDS_FIXES
 		if (cl->netchan.last_received < droptime)
 		{
 			SV_BroadcastPrintf("%s timed out\n", cl->name);
@@ -3915,7 +4177,7 @@ void EXT_FUNC SV_WriteFullClientUpdate_internal(IGameClient *client, char *info,
 {
 	client_t* cl = client->GetClient();
 
-#ifndef REHLDS_OPT_PEDANTIC
+#if !defined(REHLDS_FIXES) && !defined(REHLDS_OPT_PEDANTIC)
 	unsigned char digest[16];
 
 	MD5Context_t ctx;
@@ -3929,7 +4191,7 @@ void EXT_FUNC SV_WriteFullClientUpdate_internal(IGameClient *client, char *info,
 	MSG_WriteLong(sb, cl->userid);
 	MSG_WriteString(sb, info);
 
-#ifndef REHLDS_OPT_PEDANTIC
+#if !defined(REHLDS_FIXES) && !defined(REHLDS_OPT_PEDANTIC)
 	MSG_WriteBuf(sb, sizeof(digest), digest);
 #else
 	MSG_WriteBuf(sb, 16, cl->hashedcdkey);
@@ -4401,15 +4663,20 @@ int SV_CreatePacketEntities(sv_delta_t type, client_t *client, packet_entities_t
 	return g_RehldsHookchains.m_SV_CreatePacketEntities.callChain(SV_CreatePacketEntities_api, type, GetRehldsApiClient(client), to, msg);
 }
 
+// Computes either a compressed, or uncompressed delta buffer for the client
+// Returns the size IN BITS of the message buffer created
 int SV_CreatePacketEntities_internal(sv_delta_t type, client_t *client, packet_entities_t *to, sizebuf_t *msg)
 {
-	packet_entities_t *from;
-	int oldindex;
-	int newindex;
-	int oldnum;
-	int newnum;
+	edict_t *ent;
+	client_frame_t *fromframe;
+	packet_entities_t *from;		// Entity packet for that frame
+	delta_t	*delta;
+	int		oldindex, newindex;
+	int		oldnum, newnum;
 	int oldmax;
-	int numbase;
+	qboolean custom = FALSE;
+	int		offset;
+	int		numbase = 0;
 
 	// fix for https://github.com/dreamstalker/rehlds/issues/24
 #ifdef REHLDS_FIXES
@@ -4417,129 +4684,116 @@ int SV_CreatePacketEntities_internal(sv_delta_t type, client_t *client, packet_e
 	uint64 toBaselinesForceMask[MAX_PACKET_ENTITIES];
 #endif
 
-	numbase = 0;
+	// See if this is a full update
 	if (type == sv_packet_delta)
 	{
-		client_frame_t *fromframe = &client->frames[SV_UPDATE_MASK & client->delta_sequence];
+		// This is the frame that we are going to delta update from
+		fromframe = &client->frames[SV_UPDATE_MASK & client->delta_sequence];
 		from = &fromframe->entities;
 		_mm_prefetch((const char*)&from->entities[0], _MM_HINT_T0);
 		_mm_prefetch(((const char*)&from->entities[0]) + 64, _MM_HINT_T0);
-		oldmax = from->num_entities;
-		MSG_WriteByte(msg, svc_deltapacketentities);
-		MSG_WriteShort(msg, to->num_entities);
-		MSG_WriteByte(msg, client->delta_sequence);
+		oldmax = fromframe->entities.num_entities;
+
+		MSG_WriteByte(msg, svc_deltapacketentities);    // This is a delta
+		MSG_WriteShort(msg, to->num_entities);          // This is how many ents are in the new packet
+		MSG_WriteByte(msg, client->delta_sequence);     // This is the sequence # that we are updating from
 	}
 	else
 	{
-		oldmax = 0;
+		oldmax = 0;	// no delta update
 		from = NULL;
-		MSG_WriteByte(msg, svc_packetentities);
-		MSG_WriteShort(msg, to->num_entities);
+
+		MSG_WriteByte(msg, svc_packetentities);         // Just a packet update.
+		MSG_WriteShort(msg, to->num_entities);          // This is the # of entities we are sending.
 	}
 
-	newnum = 0; //index in to->entities
-	oldnum = 0; //index in from->entities
+	newindex = 0; // index in to->entities
+	oldindex = 0; // index in from->entities
+
 	MSG_StartBitWriting(msg);
-	while (1)
+
+	while (newindex < to->num_entities || oldindex < oldmax)
 	{
-		if (newnum < to->num_entities)
-		{
-			newindex = to->entities[newnum].number;
-		}
-		else
-		{
-			if (oldnum >= oldmax)
-				break;
+		newnum = (newindex >= to->num_entities) ? ENTITY_SENTINEL : to->entities[newindex].number;
+		oldnum = (!from || oldindex >= oldmax)  ? ENTITY_SENTINEL : from->entities[oldindex].number; // FIXED: from can be null
 
-			if (newnum < to->num_entities)
-				newindex = to->entities[newnum].number;
-			else
-				newindex = 9999;
-		}
-
-#ifdef REHLDS_FIXES
-		if (oldnum < oldmax && from)
-#else
-		if (oldnum < oldmax)
-#endif
-			oldindex = from->entities[oldnum].number;
-		else
-			oldindex = 9999;
-
-		if (newindex == oldindex)
+		// this is a delta update of the entity from old position
+		if (newnum == oldnum)
 		{
-			entity_state_t *baseline_ = &to->entities[newnum];
-			qboolean custom = baseline_->entityType & 0x2 ? TRUE : FALSE;
-			SV_SetCallback(newindex, FALSE, custom, &numbase, FALSE, 0);
-			DELTA_WriteDelta((uint8 *)&from->entities[oldnum], (uint8 *)baseline_, FALSE, custom ? g_pcustomentitydelta : (SV_IsPlayerIndex(newindex) ? g_pplayerdelta : g_pentitydelta), &SV_InvokeCallback);
-			++oldnum;
-			_mm_prefetch((const char*)&from->entities[oldnum], _MM_HINT_T0);
-			_mm_prefetch(((const char*)&from->entities[oldnum]) + 64, _MM_HINT_T0);
-			++newnum;
+			// delta update from old position
+			// because the force parm is false, this will not result
+			// in any bytes being emitted if the entity has not changed at all
+			// note that players are always 'newentities', this updates their oldorigin always
+			// and prevents warping
+
+			entity_state_t *baseline = &to->entities[newindex];
+			custom = (baseline->entityType == ENTITY_BEAM) ? TRUE : FALSE;
+			SV_SetCallback(newnum, FALSE, custom, &numbase, FALSE, 0);
+			DELTA_WriteDelta((uint8 *)&from->entities[oldindex], (uint8 *)baseline, FALSE, custom ? g_pcustomentitydelta : (SV_IsPlayerIndex(newnum) ? g_pplayerdelta : g_pentitydelta), &SV_InvokeCallback);
+			oldindex++;
+			_mm_prefetch((const char*)&from->entities[oldindex], _MM_HINT_T0);
+			_mm_prefetch(((const char*)&from->entities[oldindex]) + 64, _MM_HINT_T0);
+			newindex++;
 			continue;
 		}
 
-		if (newindex >= oldindex)
+		// Figure out how we want to update the entity
+		// This is a new entity, send it from the baseline
+		if (newnum < oldnum)
 		{
-			if (newindex > oldindex)
-			{
-				SV_WriteDeltaHeader(oldindex, TRUE, FALSE, &numbase, FALSE, 0, FALSE, 0);
-				++oldnum;
-				_mm_prefetch((const char*)&from->entities[oldnum], _MM_HINT_T0);
-				_mm_prefetch(((const char*)&from->entities[oldnum]) + 64, _MM_HINT_T0);
-			}
-			continue;
-		}
+			//
+			// If the entity was not in the old packet (oldnum == 9999),
+			// then delta from the baseline since this is a new entity
 
-		edict_t *ent = EDICT_NUM(newindex);
-		qboolean custom = to->entities[newnum].entityType & 0x2 ? TRUE : FALSE;
-		SV_SetCallback(
-			newindex,
-			FALSE,
-			custom,
-			&numbase,
-			from == NULL,
-			0);
+			ent = EDICT_NUM(newnum);
+			custom = (to->entities[newindex].entityType == ENTITY_BEAM) ? TRUE : FALSE;
 
-		entity_state_t *baseline_ = &g_psv.baselines[newindex];
-		if (sv_instancedbaseline.value != 0.0f && g_psv.instance_baselines->number != 0 && newindex > sv_lastnum)
+			if (from == NULL)
+				SV_SetCallback(newnum, FALSE, custom, &numbase, TRUE, 0);
+		else
+				SV_SetCallback(newnum, FALSE, custom, &numbase, FALSE, 0);
+
+			// this is a new entity, send it from the baseline
+			entity_state_t *baseline = &g_psv.baselines[newnum];
+
+			if (sv_instancedbaseline.value && g_psv.instance_baselines->number != 0 && newnum > sv_lastnum)
 		{
 			for (int i = 0; i < g_psv.instance_baselines->number; i++)
 			{
 				if (g_psv.instance_baselines->classname[i] == ent->v.classname)
 				{
 					SV_SetNewInfo(i);
-					baseline_ = &g_psv.instance_baselines->baseline[i];
+						baseline = &g_psv.instance_baselines->baseline[i];
 					break;
 				}
 			}
 		}
 		else
 		{
+				// If this is full update
 			if (!from)
 			{
-				int offset = SV_FindBestBaseline(newnum, &baseline_, to->entities, newindex, custom);
-				_mm_prefetch((const char*)baseline_, _MM_HINT_T0);
-				_mm_prefetch(((const char*)baseline_) + 64, _MM_HINT_T0);
+					offset = SV_FindBestBaseline(newindex, &baseline, to->entities, newnum, custom);
+					_mm_prefetch((const char*)baseline, _MM_HINT_T0);
+					_mm_prefetch(((const char*)baseline) + 64, _MM_HINT_T0);
 				if (offset)
-					SV_SetCallback(newindex, FALSE, custom, &numbase, TRUE, offset);
+						SV_SetCallback(newnum, FALSE, custom, &numbase, TRUE, offset);
 
 				// fix for https://github.com/dreamstalker/rehlds/issues/24
 #ifdef REHLDS_FIXES
 				if (offset)
-					baselineToIdx = newnum - offset;
+						baselineToIdx = newindex - offset;
 #endif
 			}
 		}
 
-
-		delta_t* delta = custom ? g_pcustomentitydelta : (SV_IsPlayerIndex(newindex) ? g_pplayerdelta : g_pentitydelta);
+			delta = custom ? g_pcustomentitydelta : (SV_IsPlayerIndex(newnum) ? g_pplayerdelta : g_pentitydelta);
 
 		// fix for https://github.com/dreamstalker/rehlds/issues/24
 #ifdef REHLDS_FIXES
 		DELTA_WriteDeltaForceMask(
-			(uint8 *)baseline_,
-			(uint8 *)&to->entities[newnum],
+				(uint8 *)baseline,
+				(uint8 *)&to->entities[newindex],
 			TRUE,
 			delta,
 			&SV_InvokeCallback,
@@ -4551,25 +4805,42 @@ int SV_CreatePacketEntities_internal(sv_delta_t type, client_t *client, packet_e
 		uint64 usedMask = DELTA_GetMaskU64(delta);
 		uint64 diffMask = origMask ^ usedMask;
 
-		//Remember changed fields that was marked in original mask, but unmarked by the conditional encoder
-		toBaselinesForceMask[newnum] = diffMask & origMask;
+			// Remember changed fields that was marked in original mask, but unmarked by the conditional encoder
+			toBaselinesForceMask[newindex] = diffMask & origMask;
 
-
-#else //REHLDS_FIXES
+#else // REHLDS_FIXES
 		DELTA_WriteDelta(
-			(uint8 *)baseline_,
-			(uint8 *)&to->entities[newnum],
+				(uint8 *)baseline,
+				(uint8 *)&to->entities[newindex],
 			TRUE,
 			delta,
 			&SV_InvokeCallback
 			);
-#endif //REHLDS_FIXES
+#endif // REHLDS_FIXES
 
-		++newnum;
+			newindex++;
+			continue;
+		}
 
+		// the old entity isn't present in the new message
+		if (newnum > oldnum)
+		{
+			//
+			// If the entity was in the old list, but is not in the new list (newnum == 9999),
+			// then construct a special remove message
+
+			// remove = TRUE, tell the client that entity was removed from server
+			SV_WriteDeltaHeader(oldnum, TRUE, FALSE, &numbase, FALSE, 0, FALSE, 0);
+			oldindex++;
+			_mm_prefetch((const char*)&from->entities[oldindex], _MM_HINT_T0);
+			_mm_prefetch(((const char*)&from->entities[oldindex]) + 64, _MM_HINT_T0);
+			continue;
+	}
 	}
 
+	// No more entities.. (end of packet entities)
 	MSG_WriteBits(0, 16);
+
 	MSG_EndBitWriting(msg);
 	return msg->cursize;
 }
@@ -4799,16 +5070,38 @@ void SV_WriteEntitiesToClient(client_t *client, sizebuf_t *msg)
 		auto &entityState = curPack->entities[i];
 		if (entityState.number > MAX_CLIENTS)
 		{
-			if (sv_rehlds_attachedentities_playeranimationspeed_fix.string[0] == '1'
-				&& entityState.movetype == MOVETYPE_FOLLOW
-				&& 1 <= entityState.aiment && entityState.aiment <= MAX_CLIENTS)
+			if (entityState.movetype == MOVETYPE_FOLLOW)
 			{
+				if (entityState.aiment > 0 && entityState.aiment < g_psv.num_edicts)
+				{
+					if (sv_rehlds_attachedentities_playeranimationspeed_fix.string[0] == '1' &&
+						entityState.aiment <= MAX_CLIENTS)
+					{
 				attachedEntCount[entityState.aiment]++;
+			}
+
+					// Prevent crash "Cache_UnlinkLRU: NULL link" on client-side
+					// if aiment with sprite model will be to render as a studio model
+					edict_t *ent = &g_psv.edicts[entityState.aiment];
+					if (ent->v.modelindex >= 0 && ent->v.modelindex < MAX_MODELS
+						&& (!g_psv.models[ent->v.modelindex]
+						|| g_psv.models[ent->v.modelindex]->type != mod_studio))
+					{
+						entityState.aiment = 0;
+						entityState.movetype = MOVETYPE_NONE;
+					}
+				}
+				else
+				{
+					entityState.aiment = 0;
+					entityState.movetype = MOVETYPE_NONE;
+				}
 			}
 
 			// Prevent spam "Non-sprite set to glow!" in console on client-side
 			if (entityState.rendermode == kRenderGlow
 				&& (entityState.modelindex >= 0 && entityState.modelindex < MAX_MODELS)
+				&& g_psv.models[entityState.modelindex]
 				&& g_psv.models[entityState.modelindex]->type != mod_sprite)
 			{
 				entityState.rendermode = kRenderNormal;
@@ -4863,7 +5156,13 @@ qboolean SV_SendClientDatagram(client_t *client)
 #ifdef REHLDS_FIXES
 	if (sv_rehlds_local_gametime.value != 0.0f)
 	{
-		MSG_WriteFloat(&msg, (float)g_GameClients[client - g_psvs.clients]->GetLocalGameTime());
+		CGameClient* gameClient = g_GameClients[client - g_psvs.clients];
+
+		double localGameTime = gameClient->GetLocalGameTime();
+		double localGameTimeBase = gameClient->GetLocalGameTimeBase();
+		DELTA_SetTimeBaseOverride(localGameTime, localGameTimeBase);
+
+		MSG_WriteFloat(&msg, (float)localGameTime);
 	}
 	else
 #endif
@@ -4899,6 +5198,10 @@ qboolean SV_SendClientDatagram(client_t *client)
 	}
 
 	Netchan_Transmit(&client->netchan, msg.cursize, buf);
+
+#ifdef REHLDS_FIXES
+	DELTA_ClearTimeBaseOverride();
+#endif
 
 	return TRUE;
 }
@@ -4942,39 +5245,27 @@ void SV_UpdateToReliableMessages(void)
 			SV_UpdateUserInfo(client);
 		}
 
-		if (!client->fakeclient && (client->active || client->connected))
-		{
-			if (sv_gpNewUserMsgs != NULL)
-			{
-				SV_SendUserReg(&client->netchan.message);
+		// Never send a new user messages to bots
+		if (client->fakeclient)
+			continue;
+
+		if (!client->active && !client->connected)
+			continue;
+
+		// Send only new list of user messages
+		SV_SendUserReg(&client->netchan.message, sv_gpNewUserMsgs);
 			}
-		}
-	}
 
 	// Link new user messages to sent chain
-	if (sv_gpNewUserMsgs != NULL)
-	{
-		UserMsg *pMsg = sv_gpUserMsgs;
-		if (pMsg != NULL)
-		{
-			while (pMsg->next)
-			{
-				pMsg = pMsg->next;
-			}
-			pMsg->next = sv_gpNewUserMsgs;
-		}
-		else
-		{
-			sv_gpUserMsgs = sv_gpNewUserMsgs;
-		}
-		sv_gpNewUserMsgs = NULL;
-	}
+	SV_LinkUserMessages();
 
+	// Clear the server datagram if it overflowed
 	if (g_psv.datagram.flags & SIZEBUF_OVERFLOWED)
 	{
 		Con_DPrintf("sv.datagram overflowed!\n");
 		SZ_Clear(&g_psv.datagram);
 	}
+
 	if (g_psv.spectator.flags & SIZEBUF_OVERFLOWED)
 	{
 		Con_DPrintf("sv.spectator overflowed!\n");
@@ -5411,6 +5702,39 @@ void PrecacheMapSpecifiedResources()
 }
 #endif // REHLDS_FIXES
 
+#ifdef REHLDS_FIXES
+// Cleans up one .res line. NULL if it holds no resource.
+char *SV_TrimResourceLine(char *line)
+{
+	while (*line && (uint8_t)*line <= ' ')
+		line++;
+
+	// Comments start at a token boundary, so models//foo.mdl survives
+	for (char *p = line; p[0]; p++)
+	{
+		if (p[0] == '/' && p[1] == '/' && (p == line || (uint8_t)p[-1] <= ' '))
+		{
+			p[0] = '\0';
+			break;
+		}
+	}
+
+	size_t len = Q_strlen(line);
+
+	while (len > 0 && (uint8_t)line[len - 1] <= ' ')
+		len--;
+
+	if (len >= 2 && line[0] == '"' && line[len - 1] == '"')
+	{
+		line++;
+		len -= 2;
+	}
+
+	line[len] = '\0';
+	return len ? line : NULL;
+}
+#endif // REHLDS_FIXES
+
 void SV_CreateGenericResources(void)
 {
 	char filename[MAX_PATH];
@@ -5437,12 +5761,33 @@ void SV_CreateGenericResources(void)
 
 	while (1)
 	{
+#ifdef REHLDS_FIXES
+		// FIXED: .res is line-delimited; COM_Parse shattered spaced paths
+		char *nextData = COM_ParseLine(data);
+		char *resName = SV_TrimResourceLine(com_token);
+
+		if (!resName)
+		{
+			if (!nextData)
+				break;	// end of file
+
+			data = nextData;
+			continue;	// blank line or a comment
+		}
+
+		// Everything below reads com_token
+		if (resName != com_token)
+			Q_memmove(com_token, resName, Q_strlen(resName) + 1);
+
+		// NULL on the last line; the next pass breaks
+		data = nextData;
+
+		char *com_token_extension = Q_strrchr(com_token, '.');
+		bool successful = false;
+#else
 		data = COM_Parse(data);
 		if (Q_strlen(com_token) <= 0)
 			break;
-#ifdef REHLDS_FIXES
-		char *com_token_extension = Q_strrchr(com_token, '.');
-		bool successful = false;
 #endif
 
 		if (Q_strstr(com_token, ".."))
@@ -5496,6 +5841,10 @@ void SV_CreateGenericResources(void)
 		{
 			// In fixed version of PrecacheGeneric we don't need local copy
 #ifdef REHLDS_FIXES
+			// Advertised RES_FATALIFMISSING anyway; may live only on fastdl
+			if (!FS_FileExists(com_token))
+				Con_Printf("WARNING: resource '%s' from '%s' not found!\n", com_token, filename);
+
 			PF_precache_generic_I(com_token);
 			Con_DPrintf("  %s\n", com_token);
 			g_psv.num_generic_names++;
@@ -5637,6 +5986,16 @@ void SV_PropagateCustomizations(void)
 			if (pCust->bInUse)
 			{
 				pResource = &pCust->resource;
+
+#ifdef REHLDS_FIXES
+				// skip logos if sv_send_logos is 0
+				if ((pResource->ucFlags & RES_CUSTOM) && !sv_send_logos.value)
+				{
+					pCust = pCust->pNext;
+					continue;
+				}
+#endif
+
 				MSG_WriteByte(&host_client->netchan.message, svc_customization);
 				MSG_WriteByte(&host_client->netchan.message, i);
 				MSG_WriteByte(&host_client->netchan.message, pResource->type);
@@ -5931,7 +6290,7 @@ void PrecacheModelSounds(studiohdr_t *pStudioHeader)
 void PrecacheModelSpecifiedFiles()
 {
 	const char **s = &g_psv.model_precache[1];
-	for (size_t i = 1; i < ARRAYSIZE(g_psv.model_precache) && *s != nullptr; i++, s++)
+	for (size_t i = 1; i < ARRAYSIZE(g_psv.model_precache) && *s && g_psv.models[i]; i++, s++)
 	{
 		if (g_psv.models[i]->type != mod_studio)
 			continue;
@@ -5968,6 +6327,29 @@ void MoveCheckedResourcesToFirstPositions()
 	}
 }
 #endif // REHLDS_FIXES
+
+// Moves pending new user messages to main list of sv_gpUserMsgs
+void SV_LinkUserMessages()
+{
+	if (!sv_gpNewUserMsgs)
+		return;
+
+	// Link new user messages to sent chain
+	UserMsg *pMsg = sv_gpUserMsgs;
+	if (pMsg)
+	{
+		while (pMsg->next)
+			pMsg = pMsg->next;
+
+		pMsg->next = sv_gpNewUserMsgs;
+	}
+	else
+	{
+		sv_gpUserMsgs = sv_gpNewUserMsgs;
+	}
+
+	sv_gpNewUserMsgs = NULL;
+}
 
 void SV_ActivateServer(int runPhysics)
 {
@@ -6048,16 +6430,13 @@ void EXT_FUNC SV_ActivateServer_internal(int runPhysics)
 				Netchan_Transmit(&cl->netchan, 0, NULL);
 			}
 			else
-				SV_SendServerinfo(&msg, cl);
-
-			if (sv_gpUserMsgs)
 			{
-				pTemp = sv_gpNewUserMsgs;
-				sv_gpNewUserMsgs = sv_gpUserMsgs;
-				SV_SendUserReg(&msg);
-				sv_gpNewUserMsgs = pTemp;
+				SV_SendServerinfo(&msg, cl);
 			}
+
+			SV_SendUserReg(&msg, sv_gpUserMsgs);
 			cl->hasusrmsgs = TRUE;
+
 			Netchan_CreateFragments(TRUE, &cl->netchan, &msg);
 			Netchan_FragSend(&cl->netchan);
 			SZ_Clear(&msg);
@@ -6371,7 +6750,7 @@ int SV_SpawnServer(qboolean bIsDemo, char *server, char *startspot)
 	gGlobalVariables.serverflags = g_psvs.serverflags;
 	gGlobalVariables.mapname = (size_t)g_psv.name - (size_t)pr_strings;
 	gGlobalVariables.startspot = (size_t)g_psv.startspot - (size_t)pr_strings;
-	SV_SetMoveVars();
+	SV_SetMoveVars(&sv_movevars);
 
 	return 1;
 }
@@ -6440,18 +6819,37 @@ void SV_ClearEntities(void)
 			ReleaseEntityDLLFields(pEdict);
 	}
 }
-int EXT_FUNC RegUserMsg(const char *pszName, int iSize)
+
+int EXT_FUNC SV_RegUserMsg(const char *pszName, int iSize)
 {
-	if (giNextUserMsg > 255 || !pszName || Q_strlen(pszName) > 11 || iSize > 192)
+	if (giNextUserMsg >= MAX_USERMESSAGES)
+	{
+		Con_Printf("%s: Not enough room to register message %s, limit: %i\n", __func__, pszName, MAX_USERMESSAGES);
+		return 0;
+	}
+
+	if (!pszName)
 		return 0;
 
-	UserMsg *pUserMsgs = sv_gpUserMsgs;
-	while (pUserMsgs)
+	if (Q_strlen(pszName) >= MAX_USERMESSAGES_LENGTH - 1)
 	{
-		if (!Q_strcmp(pszName, pUserMsgs->szName))
-			return pUserMsgs->iMsg;
+		Con_Printf("%s: Message name too long: %s\n", __func__, pszName);
+		return 0;
+	}
 
-		pUserMsgs = pUserMsgs->next;
+	if (iSize > MAX_USER_MSG_DATA)
+		return 0;
+
+	for (UserMsg *pMsg = sv_gpUserMsgs; pMsg; pMsg = pMsg->next)
+	{
+		if (!Q_strcmp(pszName, pMsg->szName))
+			return pMsg->iMsg;
+	}
+
+	for (UserMsg *pMsg = sv_gpNewUserMsgs; pMsg; pMsg = pMsg->next)
+	{
+		if (!Q_strcmp(pszName, pMsg->szName))
+			return pMsg->iMsg;
 	}
 
 	UserMsg *pNewMsg = (UserMsg *)Mem_ZeroMalloc(sizeof(UserMsg));
@@ -6464,7 +6862,6 @@ int EXT_FUNC RegUserMsg(const char *pszName, int iSize)
 	return pNewMsg->iMsg;
 }
 
-#ifdef REHLDS_FIXES
 uint32_t CIDRToMask(int cidr)
 {
 	return htonl(0xFFFFFFFFull << (32 - cidr));
@@ -6614,44 +7011,6 @@ qboolean StringToFilter(const char *s, ipfilter_t *f)
 
 	return true;
 }
-#else // REHLDS_FIXES
-qboolean StringToFilter(const char *s, ipfilter_t *f)
-{
-	char num[128];
-	unsigned char b[4] = { 0, 0, 0, 0 };
-	unsigned char m[4] = { 0, 0, 0, 0 };
-
-	const char* cc = s;
-	int i = 0;
-	while (1)
-	{
-		if (*cc < '0' || *cc > '9')
-			break;
-
-		int j = 0;
-		while (*cc >= '0' && *cc <= '9')
-			num[j++] = *(cc++);
-
-		num[j] = 0;
-		b[i] = Q_atoi(num);
-		if (b[i])
-			m[i] = -1;
-
-		if (*cc)
-		{
-			++cc;
-			++i;
-			if (i < 4)
-				continue;
-		}
-		f->mask = *(uint32 *)m;
-		f->compare.u32 = *(uint32 *)b;
-		return TRUE;
-	}
-	Con_Printf("Bad filter address: %s\n", cc);
-	return FALSE;
-}
-#endif // REHLDS_FIXES
 
 USERID_t *SV_StringToUserID(const char *str)
 {
@@ -7575,6 +7934,14 @@ void SV_InactivateClients(void)
 			cl->hasusrmsgs = FALSE;
 			cl->m_bSentNewResponse = FALSE;
 
+#ifdef REHLDS_FIXES
+			// Arm the reconnect deadline: this slot must re-initiate its connection
+			// (SV_ConnectClient clears it) within sv_reconnect_timeout, or SV_CheckTimeouts
+			// force-drops it regardless of netchan activity. Closes the oxware changelevel
+			// phantom-slot exploit, where the cheat blocks "reconnect" and keeps the netchan warm.
+			g_GameClients[i]->SetReconnectDeadline(realtime);
+#endif // REHLDS_FIXES
+
 			SZ_Clear(&cl->netchan.message);
 			SZ_Clear(&cl->datagram);
 
@@ -7718,20 +8085,91 @@ qboolean IsSafeFileToDownload(const char *filename)
 	return TRUE;
 }
 
+#ifdef REHLDS_FIXES
+// Cmd_Argv(1) ends the path at its first space. NULL rejects the request.
+const char *SV_GetRequestedDownloadName(char *out, size_t outSize)
+{
+	const char *args = Cmd_Args();
+
+	// A quoted path is already complete in argv(1)
+	if (!args || !args[0] || args[0] == '"')
+		return Cmd_Argv(1);
+
+	// cmd_args keeps everything past a client-embedded newline
+	size_t len = 0;
+	while (args[len] && args[len] != '\n' && args[len] != '\r')
+	{
+		if (++len >= outSize)
+			return NULL;	// no legitimate resource path is this long
+	}
+
+	while (len > 0 && (uint8_t)args[len - 1] <= ' ')
+		len--;
+
+	if (len == 0)
+		return NULL;
+
+	Q_memcpy(out, args, len);
+	out[len] = '\0';
+	return out;
+}
+#endif // REHLDS_FIXES
+
 void SV_BeginFileDownload_f(void)
 {
 	const char *name;
 	char szModuleC[13] = "!ModuleC.dll";
+#ifdef REHLDS_FIXES
+	char namebuf[MAX_PATH];
+#endif
 
-	if (Cmd_Argc() < 2 || cmd_source == src_command)
+	if (cmd_source == src_command)
 	{
 		return;
 	}
 
+	if (Cmd_Argc() < 2)
+	{
+		return;
+	}
+
+#ifdef REHLDS_FIXES
+	// FIXED: Rebuild resource paths that contain spaces
+	name = SV_GetRequestedDownloadName(namebuf, sizeof(namebuf));
+	if (!name)
+	{
+		SV_FailDownload(Cmd_Argv(1));
+		return;
+	}
+#else
 	name = Cmd_Argv(1);
+#endif
+
 	if (!name || !name[0] || (!Q_strncmp(name, szModuleC, 12) && g_psvs.isSecure))
 	{
 		return;
+	}
+
+#ifdef REHLDS_FIXES
+	// DoS hardening: every regular-file dlfile request costs a token from the
+	// client's bucket, duplicates included - deduplication below makes them
+	// cheap to serve, but the parse cost alone is enough to flood the main
+	// thread. A request that arrives with the bucket empty is dropped; a
+	// client that keeps hammering a dropped bucket gets kicked.
+	// Custom logo requests are not counted: they are bounded by the custom.hpk
+	// contents and keep accumulating over the whole session (issue #1200).
+	if (name[0] != '!' && g_DlFileRateLimiter.DlFileIssued(host_client - g_psvs.clients))
+	{
+		return;
+	}
+#endif
+
+	// DoS hardening: drop duplicate download requests before any validation
+	// work - filesystem lookups on every flooded request are what still burns
+	// CPU while a transfer is active (issue #1200).
+	if (Netchan_IsFileTransferActive(&host_client->netchan, name))
+	{
+		return;		// this file is already being transferred
 	}
 
 	if (!IsSafeFileToDownload(name) || sv_allow_download.value == 0.0f)
@@ -7775,7 +8213,9 @@ void SV_BeginFileDownload_f(void)
 #ifdef REHLDS_FIXES
 		if (pbuf && size)
 		{
-			Netchan_CreateFileFragmentsFromBuffer(TRUE, &host_client->netchan, name, pbuf, size);
+			if (!Netchan_CreateFileFragmentsFromBuffer(TRUE, &host_client->netchan, name, pbuf, size))
+				SV_FailDownload(name);
+			else
 			Netchan_FragSend(&host_client->netchan);
 		}
 		// Mem_Free pbuf even if size is zero
@@ -7786,7 +8226,9 @@ void SV_BeginFileDownload_f(void)
 #else // REHLDS_FIXES
 		if (pbuf && size)
 		{
-			Netchan_CreateFileFragmentsFromBuffer(TRUE, &host_client->netchan, name, pbuf, size);
+			if (!Netchan_CreateFileFragmentsFromBuffer(TRUE, &host_client->netchan, name, pbuf, size))
+				SV_FailDownload(name);
+			else
 			Netchan_FragSend(&host_client->netchan);
 			Mem_Free((void *)pbuf);
 		}
@@ -7997,7 +8439,6 @@ void EXT_FUNC SV_Frame_Internal()
 		SV_Physics();
 		g_psv.time += host_frametime;
 	}
-	SV_QueryMovevarsChanged();
 	SV_RequestMissingResourcesFromClients();
 	SV_CheckTimeouts();
 
@@ -8114,6 +8555,11 @@ void SV_Init(void)
 	Cmd_AddCommand("listid", SV_ListId_f);
 	Cmd_AddCommand("writeid", SV_WriteId_f);
 	Cmd_AddCommand("resetrcon", SV_ResetRcon_f);
+#ifdef REHLDS_FIXES
+	Cmd_AddCommand("rcon_adduser", SV_RconAddUser_f);
+	Cmd_AddCommand("rcon_deluser", SV_RconDelUser_f);
+	Cmd_AddCommand("rcon_users", SV_RconUsers_f);
+#endif
 	Cmd_AddCommand("logaddress", SV_SetLogAddress_f);
 	Cmd_AddCommand("logaddress_add", SV_AddLogAddress_f);
 	Cmd_AddCommand("logaddress_del", SV_DelLogAddress_f);
@@ -8186,6 +8632,9 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_skyvec_y);
 	Cvar_RegisterVariable(&sv_skyvec_z);
 	Cvar_RegisterVariable(&sv_timeout);
+#ifdef REHLDS_FIXES
+	Cvar_RegisterVariable(&sv_reconnect_timeout);
+#endif // REHLDS_FIXES
 	Cvar_RegisterVariable(&sv_clienttrace);
 	Cvar_RegisterVariable(&sv_zmax);
 	Cvar_RegisterVariable(&sv_wateramp);
@@ -8229,6 +8678,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_version);
 	Cvar_RegisterVariable(&sv_allow_dlfile);
 #ifdef REHLDS_FIXES
+	Cvar_RegisterVariable(&sv_tags);
 	Cvar_RegisterVariable(&sv_force_ent_intersection);
 	Cvar_RegisterVariable(&sv_echo_unknown_cmd);
 	Cvar_RegisterVariable(&sv_auto_precache_sounds_in_models);
@@ -8246,6 +8696,7 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_rollangle);
 	Cvar_RegisterVariable(&sv_use_entity_file);
 	Cvar_RegisterVariable(&sv_usercmd_custom_random_seed);
+	Cvar_RegisterVariable(&sv_rehlds_allow_large_sprays);
 	Cvar_RegisterVariable(&sv_lowercase);
 	Cvar_RegisterVariable(&sv_precache_bspmodels);
 	Cvar_RegisterVariable(&sv_printcvar);
@@ -8255,6 +8706,35 @@ void SV_Init(void)
 	Cvar_RegisterVariable(&sv_debug_linkedict);
 	Cvar_RegisterVariable(&sv_retouch);
 #endif
+
+	//------------------------------------------------
+	// Movevars cvarhook registers
+	//------------------------------------------------
+	CVARHOOK_MOVEVARS(sv_gravity);
+	CVARHOOK_MOVEVARS(sv_stopspeed);
+	CVARHOOK_MOVEVARS(sv_maxspeed);
+	CVARHOOK_MOVEVARS(sv_spectatormaxspeed);
+	CVARHOOK_MOVEVARS(sv_accelerate);
+	CVARHOOK_MOVEVARS(sv_airaccelerate);
+	CVARHOOK_MOVEVARS(sv_wateraccelerate);
+	CVARHOOK_MOVEVARS(sv_friction);
+	CVARHOOK_MOVEVARS(sv_edgefriction);
+	CVARHOOK_MOVEVARS(sv_waterfriction);
+	CVARHOOK_MOVEVARS(sv_bounce);
+	CVARHOOK_MOVEVARS(sv_stepsize);
+	CVARHOOK_MOVEVARS(sv_maxvelocity);
+	CVARHOOK_MOVEVARS(sv_zmax);
+	CVARHOOK_MOVEVARS(sv_wateramp);
+	CVARHOOK_MOVEVARS(sv_footsteps);
+	CVARHOOK_MOVEVARS(sv_rollangle);
+	CVARHOOK_MOVEVARS(sv_rollspeed);
+	CVARHOOK_MOVEVARS(sv_skycolor_r);
+	CVARHOOK_MOVEVARS(sv_skycolor_g);
+	CVARHOOK_MOVEVARS(sv_skycolor_b);
+	CVARHOOK_MOVEVARS(sv_skyvec_x);
+	CVARHOOK_MOVEVARS(sv_skyvec_y);
+	CVARHOOK_MOVEVARS(sv_skyvec_z);
+	CVARHOOK_MOVEVARS(sv_skyname);
 
 	for (int i = 0; i < MAX_MODELS; i++)
 	{
