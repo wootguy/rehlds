@@ -61,6 +61,10 @@ cvar_t sys_ticrate = { "sys_ticrate", "100.0", 0, 0.0f, NULL };
 void sys_timescale_hook_callback(cvar_t *cvar);
 cvarhook_t sys_timescale_hook = { sys_timescale_hook_callback, NULL, NULL };
 cvar_t sys_timescale = { "sys_timescale", "1.0", 0, 0.0f, NULL };
+// Dedicated server only. > 0: every server frame advances the game by exactly this many seconds, whatever the wall time,
+// so frame timing can't change what happens (for repeatable tests). sys_timescale then caps the speed (game seconds per
+// wall second); 0 runs frames back to back as fast as the machine can.
+cvar_t sys_fixedframetime = { "sys_fixedframetime", "0", 0, 0.0f, NULL };
 
 cvar_t fps_max = { "fps_max", "100.0", FCVAR_ARCHIVE, 0.0f, NULL };
 cvar_t host_killtime = { "host_killtime", "0.0", 0, 0.0f, NULL };
@@ -149,6 +153,7 @@ void Host_InitLocal(void)
 	Cvar_RegisterVariable(&sys_ticrate);
 	Cvar_RegisterVariable(&sys_timescale);
 	Cvar_HookVariable(sys_timescale.name, &sys_timescale_hook);
+	Cvar_RegisterVariable(&sys_fixedframetime);
 
 	Cvar_RegisterVariable(&fps_max);
 	Cvar_RegisterVariable(&fps_override);
@@ -661,10 +666,25 @@ void Host_ClearMemory(qboolean bQuiet)
 	SV_ClearClientStates();
 }
 
+// game seconds per frame when sys_fixedframetime applies (dedicated server), otherwise 0
+float Host_FixedFrameTime(void)
+{
+	return (g_bIsDedicatedServer && sys_fixedframetime.value > 0.0f) ? sys_fixedframetime.value : 0.0f;
+}
+
 qboolean Host_FilterTime(float time)
 {
 	float fps;
 	static int command_line_ticrate = -1;
+
+	if (Host_FixedFrameTime() > 0.0f)
+	{
+		// the pacing is done by Host_Frame
+		host_frametime = Host_FixedFrameTime();
+		realtime += host_frametime;
+		oldrealtime = realtime;
+		return TRUE;
+	}
 
 	if (host_framerate.value > 0.0f)
 	{
@@ -949,6 +969,35 @@ void _Host_Frame(float time)
 #endif //REHLDS_FLIGHT_REC
 }
 
+// sys_fixedframetime: runs as many fixed-length frames as the speed cap (sys_timescale, 0 = none) allows, for at most
+// ~50 ms of wall time per call so the console and the OS get a turn
+static void Host_FixedFrames(float time)
+{
+	static double owed; // game time the speed cap allowed that hasn't been run yet
+	const float dt = Host_FixedFrameTime();
+	const float speed = sys_timescale.value;
+	const double start = Sys_FloatTime();
+
+	if (speed > 0.0f)
+	{
+		owed += speed * time;
+		if (owed < dt)
+			return;
+	}
+
+	do
+	{
+		_Host_Frame(time);
+		owed -= dt;
+		if (giStateInfo || !g_psv.active)
+			break;
+	} while ((speed <= 0.0f || owed >= dt) && Sys_FloatTime() - start < 0.05);
+
+	// slower than the cap (or no cap): run late rather than catch up
+	if (speed <= 0.0f || owed >= dt)
+		owed = 0.0;
+}
+
 int Host_Frame(float time, int iState, int *stateInfo)
 {
 	double time1;
@@ -966,7 +1015,10 @@ int Host_Frame(float time, int iState, int *stateInfo)
 	if (host_profile.value != 0.0f)
 		time1 = Sys_FloatTime();
 
-	_Host_Frame(time);
+	if (Host_FixedFrameTime() > 0.0f)
+		Host_FixedFrames(time);
+	else
+		_Host_Frame(time);
 	if (host_profile.value != 0.0f)
 		time2 = Sys_FloatTime();
 
