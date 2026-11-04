@@ -57,6 +57,8 @@ extern cvar_t coop;
 extern cvar_t sys_ticrate;
 extern cvar_t sys_timescale;
 extern cvar_t sys_fixedframetime;
+extern cvar_t sys_randomseed;
+extern cvar_t sys_randomlog;
 extern cvar_t fps_max;
 extern cvar_t host_killtime;
 extern cvar_t sv_stats;

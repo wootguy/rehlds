@@ -169,6 +169,7 @@ void PF_StaticDecal(const float *origin, int decalIndex, int entityIndex, int mo
 void PF_setspawnparms_I(edict_t *ent);
 void PF_changelevel_I(const char *s1, const char *s2);
 void SeedRandomNumberGenerator(void);
+void SeedRandomNumberGeneratorWith(int seed);
 int32 ran1(void);
 float fran1(void);
 float RandomFloat(float flLow, float flHigh);

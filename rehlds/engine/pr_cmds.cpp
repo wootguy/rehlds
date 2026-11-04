@@ -2490,6 +2490,16 @@ void SeedRandomNumberGenerator(void)
 	}
 }
 
+// a fixed seed (sys_randomseed): a negative idum makes ran1 rebuild its shuffle table, so the state is fully reset
+void SeedRandomNumberGeneratorWith(int seed)
+{
+	idum = -abs(seed);
+	if (idum == 0)
+	{
+		idum = -1;
+	}
+}
+
 const int IA = 16807;
 const int IM = 2147483647;
 const int IQ = 127773;
@@ -2540,11 +2550,46 @@ float fran1(void)
 	else return temp;
 }
 
+// sys_randomlog 1 (debug, Windows): every random draw is written to randomlog.txt (game time, caller module + offset), to find
+// what consumes random numbers differently in two runs with the same sys_randomseed. The file is rewritten on each map load.
+#ifdef _WIN32
+#include <intrin.h>
+#include <windows.h>
+static FILE* g_randomLog = NULL;
+static double g_randomLogMapTime = -1;
+static void LogRandomCall(void* caller, const char* kind)
+{
+	if (sys_randomlog.value == 0.0f)
+		return;
+	if (!g_randomLog || g_psv.time < g_randomLogMapTime)
+	{
+		if (g_randomLog)
+			fclose(g_randomLog);
+		g_randomLog = fopen("randomlog.txt", "w");
+		if (!g_randomLog)
+			return;
+	}
+	g_randomLogMapTime = g_psv.time;
+	HMODULE mod = NULL;
+	char name[MAX_PATH] = "?";
+	if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)caller, &mod))
+	{
+		GetModuleFileNameA(mod, name, sizeof(name));
+	}
+	const char* base = strrchr(name, '\\');
+	fprintf(g_randomLog, "%.2f %s %s+%x\n", g_psv.time, kind, base ? base + 1 : name, (unsigned)((char*)caller - (char*)mod));
+}
+#define LOG_RANDOM_CALL(kind) LogRandomCall(_ReturnAddress(), kind)
+#else
+#define LOG_RANDOM_CALL(kind)
+#endif
+
 float EXT_FUNC RandomFloat(float flLow, float flHigh)
 {
 #ifndef SWDS
 	g_engdstAddrs.pfnRandomFloat(&flLow, &flHigh);
 #endif
+	LOG_RANDOM_CALL("F");
 
 	float fl = fran1(); // float in [0,1)
 	return (fl * (flHigh - flLow)) + flLow; // float in [low,high)
@@ -2555,6 +2600,7 @@ int32 EXT_FUNC RandomLong(int32 lLow, int32 lHigh)
 #ifndef SWDS
 	g_engdstAddrs.pfnRandomLong(&lLow, &lHigh);
 #endif
+	LOG_RANDOM_CALL("L");
 
 	unsigned long maxAcceptable;
 	unsigned long x = lHigh - lLow + 1;

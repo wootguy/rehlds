@@ -65,6 +65,10 @@ cvar_t sys_timescale = { "sys_timescale", "1.0", 0, 0.0f, NULL };
 // so frame timing can't change what happens (for repeatable tests). sys_timescale then caps the speed (game seconds per
 // wall second); 0 runs frames back to back as fast as the machine can.
 cvar_t sys_fixedframetime = { "sys_fixedframetime", "0", 0, 0.0f, NULL };
+// != 0: the engine's random number generator is reseeded with this on every map load (0 = seeded from the clock at startup)
+cvar_t sys_randomseed = { "sys_randomseed", "0", 0, 0.0f, NULL };
+// debug: log every random draw to randomlog.txt (see LogRandomCall in pr_cmds.cpp)
+cvar_t sys_randomlog = { "sys_randomlog", "0", 0, 0.0f, NULL };
 
 cvar_t fps_max = { "fps_max", "100.0", FCVAR_ARCHIVE, 0.0f, NULL };
 cvar_t host_killtime = { "host_killtime", "0.0", 0, 0.0f, NULL };
@@ -154,6 +158,8 @@ void Host_InitLocal(void)
 	Cvar_RegisterVariable(&sys_timescale);
 	Cvar_HookVariable(sys_timescale.name, &sys_timescale_hook);
 	Cvar_RegisterVariable(&sys_fixedframetime);
+	Cvar_RegisterVariable(&sys_randomseed);
+	Cvar_RegisterVariable(&sys_randomlog);
 
 	Cvar_RegisterVariable(&fps_max);
 	Cvar_RegisterVariable(&fps_override);
