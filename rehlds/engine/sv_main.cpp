@@ -6547,6 +6547,13 @@ int SV_SpawnServer(qboolean bIsDemo, char *server, char *startspot)
 	oldname[sizeof(oldname) - 1] = 0;
 	Host_ClearMemory(FALSE);
 
+	// sys_randomseed: every map starts from the same random state (repeatable test runs)
+	if (sys_randomseed.value != 0.0f)
+	{
+		SeedRandomNumberGeneratorWith((int)sys_randomseed.value);
+		Con_Printf("Random seed %d\n", (int)sys_randomseed.value);
+	}
+
 	cl = g_psvs.clients;
 	for (i = 0; i < g_psvs.maxclientslimit; i++, cl++)
 		SV_ClearFrames(&cl->frames);
@@ -8341,6 +8348,12 @@ void SV_CheckCmdTimes(void)
 	{
 		client_t* cl = &g_psvs.clients[i];
 		if (!cl->connected || !cl->active)
+			continue;
+
+		// Fake clients run exactly one command per frame (pfnRunPlayerMove), they can't speedhack. Their commands before the
+		// first check made them look ahead of the clock, and they were frozen for clockwindow seconds after connecting, at a
+		// moment that depended on wall time (when this 1 s check happened to run), so runs with a fixed seed differed.
+		if (cl->fakeclient)
 			continue;
 
 		if (cl->connecttime == 0.0)
